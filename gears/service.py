@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
-from options import token, mongodb_link, fortniteapi, xboxapi, servers_data
+from options import token, mongodb_link, fortniteapi, xboxapi, servers_data, applicationID
 import os
 import time
 import datetime
@@ -41,7 +41,7 @@ class Service(commands.Cog):
             return
         if ctx.author.id == server_data.get("admin_id"):
             await ctx.respond("Скинул в ЛС.")
-            await ctx.author.send(f'Токен бота: `{token}`\nБаза MongoDB: `{mongodb_link}`\nFortnite API: `{fortniteapi}`\nXbox API: `{xboxapi}`')
+            await ctx.author.send(f'Токен бота: `{token}`\nApplication ID: `{applicationID}`\nБаза MongoDB: `{mongodb_link}`\nFortnite API: `{fortniteapi}`\nXbox API: `{xboxapi}`')
         else:
             await ctx.respond("Недостаточно прав для выполнения данной команды.")   
 
