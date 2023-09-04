@@ -12,6 +12,7 @@ version = "1.0"
 
 # Get environment variables
 token = environ.get('TOKEN')
+applicationID = environ.get('APPLICATIONID')
 fortniteapi = environ.get('FORTNITEAPI')
 xboxapi = environ.get('XBOXAPI')
 mongodb_link = environ.get('MONGODB')

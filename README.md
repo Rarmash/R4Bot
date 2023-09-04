@@ -55,6 +55,7 @@ python main.py
 ## 🛠️ О .env:
 ```ENV
 TOKEN=           // Токен бота Discord
+APPLICATIONID=   // Application ID приложения бота с Discord Developer Portal
 MONGODB=         // Адрес для подключения к БД MongoDB
 FORTNITEAPI=     // Ключ API для получения данных с https://fortnite-api.com/
 XBOXAPI=         // Ключ API для получения данных с https://xbl.io/

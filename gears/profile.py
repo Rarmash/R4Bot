@@ -5,13 +5,13 @@ import datetime
 from math import ceil
 import sys
 import platform
-from options import version, myclient, servers_data
+from options import version, myclient, servers_data, applicationID
 
 class BotLink(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         # Create an invite button with a link to invite the bot to a guild
-        invite_button = discord.ui.Button(label="Приглашение", style=discord.ButtonStyle.link, emoji="🤩", url = "https://discord.com/oauth2/authorize?client_id=935560968778448947&scope=bot&permissions=8")
+        invite_button = discord.ui.Button(label="Приглашение", style=discord.ButtonStyle.link, emoji="🤩", url = f"https://discord.com/oauth2/authorize?client_id={applicationID}&permissions=8&scope=bot%20applications.commands")
         self.add_item(invite_button)
         
 class Profile(commands.Cog):
