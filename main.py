@@ -1,7 +1,5 @@
 import discord
-import os
 from options import token, debugmode, version, myclient, gearsList
-import os.path
 
 # Define intents for the bot to receive all available events
 intents = discord.Intents.all()
@@ -29,13 +27,13 @@ async def on_ready():
         print(f"Подключились к серверу: {guild}")
     print("------")
     
-    # Set bot status and activity based on debugmode
+    # Set bot status and activity based on debug mode
     if debugmode == "ON":
         status = discord.Status.dnd
         activity = discord.Activity(type=discord.ActivityType.playing, name=f"debug-режиме (v{version})")
     else:
         status = discord.Status.online
-        activity = discord.Activity(type=discord.ActivityType.listening, name=f"обиды членов легиона (v{version})")
+        activity = discord.Activity(type=discord.ActivityType.listening, name=f"обиды участников (v{version})")
     await bot.change_presence(status=status, activity=activity)
 
 for module_name in gearsList:
