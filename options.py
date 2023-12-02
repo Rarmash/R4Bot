@@ -32,8 +32,8 @@ except FileNotFoundError:
     check_servers_file()
 
 try:
-    # Try to create a MongoDB client with the provided MongoDB link
-    myclient = pymongo.MongoClient(mongodb_link)
-except:
-    # If an exception occurs (e.g., connection failure), try to create a MongoDB client with TLS/SSL using certifi
+    # Try to create a MongoDB client with TLS/SSL using certifi
     myclient = pymongo.MongoClient(mongodb_link, tlsCAFile=certifi.where())
+except:
+    # If an exception occurs (e.g., connection failure), try to create a MongoDB client with the provided MongoDB link
+    myclient = pymongo.MongoClient(mongodb_link)
