@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord.commands import SlashCommandGroup
 from options import fortniteapi, myclient, servers_data
-import json
 import requests
 
 class Fortnite(commands.Cog):

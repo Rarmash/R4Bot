@@ -1,11 +1,11 @@
-py-cord[voice]==2.4.1
+py-cord[voice]==2.5.0
 # py-cord @ git+https://github.com/pycord/pycord-v3 # Preparing for Pycord v3
-python-dotenv==1.0.0
-pymongo==4.5.0
-dnspython==2.4.2
+python-dotenv==1.0.1
+pymongo==4.7.2
+dnspython==2.6.1
 requests==2.31.0
-gtts==2.3.2
+gtts==2.5.1
 pydub==0.25.1
 asyncio==3.4.3
-certifi==2023.7.22
-requests==2.31.0
+certifi==2024.2.2
+xbox-python-api==0.1.2.4

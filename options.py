@@ -2,13 +2,12 @@ from dotenv import load_dotenv
 from os import environ
 import pymongo
 import certifi
-import json
 from modules.generateConfig import *
 
 # Load environment variables from .env file
 load_dotenv()
 
-version = "1.0"
+version = "1.0.1"
 
 # Get environment variables
 token = environ.get('TOKEN')
