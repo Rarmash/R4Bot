@@ -43,7 +43,7 @@ class Fortnite(commands.Cog):
         await ctx.defer()
 
         # Get the Fortnite username for the player
-        username = self.get_fortnite_username(ctx, username)
+        username = get_fortnite_username(ctx, username)
         # Check if the Fortnite username is available
         if not username:
             await ctx.respond(
@@ -52,7 +52,7 @@ class Fortnite(commands.Cog):
             return
 
         # Make a request to the Fortnite API for the stats data
-        stats_data, status = self.fortnite_api_request(username)
+        stats_data, status = fortnite_api_request(username)
 
         # Handle different status codes
         if status == 403:
@@ -94,7 +94,7 @@ class Fortnite(commands.Cog):
             try:
                 embed.add_field(name="Владелец профиля",
                                 value=f"<@{search_record_id(str(ctx.guild.id), "Users", "fortnite", username)}>")
-            except TypeError:
+            except IndexError:
                 pass
             await ctx.respond(embed=embed)
         except KeyError:
@@ -128,7 +128,7 @@ class Fortnite(commands.Cog):
         await ctx.defer()
         author_id = str(ctx.author.id)
 
-        stats_data, status = self.fortnite_api_request(username)
+        stats_data, status = fortnite_api_request(username)
         if status != 200 or not stats_data:
             await ctx.respond(f"При добавлении возникла ошибка **{status}**.\nВозможно, вы неверно указали никнейм.")
             return
