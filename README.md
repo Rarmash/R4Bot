@@ -1,4 +1,4 @@
-# R4Bot ![Version](https://img.shields.io/badge/Latest-1.1.3/master-blue.svg)
+# R4Bot ![Version](https://img.shields.io/badge/Latest-1.1.4/master-blue.svg)
 Discord-бот, созданный для облегчения модерации серверов, и не только. Используются слэш-команды.
 
 ## 🛠️ Установка

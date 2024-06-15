@@ -37,7 +37,6 @@ class Xbox(commands.Cog):
 
     @xbox.command(description='Посмотреть статистику по пользователю')
     async def stats(self, ctx: discord.ApplicationContext, gamertag=None):
-        user_record = get_from_record(str(ctx.guild.id), "Users", str(ctx.author.id))
         await ctx.defer()
         gamertag = get_xbox_gamertag(ctx, gamertag)
         if not gamertag:
@@ -69,7 +68,7 @@ class Xbox(commands.Cog):
                             value=f"[Тык](https://account.xbox.com/ru-ru/Profile?Gamertag={str(gamer_info.gamertag).replace(' ', '%20')})")
             try:
                 embed.add_field(name="Владелец профиля", value=f"<@{search_record_id(str(ctx.guild.id), "Users", "xbox", gamertag)}>")
-            except TypeError:
+            except IndexError:
                 pass
             if gamer_info.isXbox360Gamerpic:
                 embed.set_thumbnail(
