@@ -1,19 +1,22 @@
+import re
+from pathlib import Path
+
 import discord
 from discord.ext import commands
-from pathlib import Path
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.effects import speedup
+
 from options import servers_data
-import re
 
 FFMPEG_OPTIONS = {'options': '-vn'}
+
 
 class Tts(commands.Cog):
     def __init__(self, bot, servers_data):
         self.Bot = bot
         self.servers_data = servers_data
-        
+
     @commands.Cog.listener()
     async def on_message(self, ctx):
         try:
@@ -23,7 +26,7 @@ class Tts(commands.Cog):
                 return
             user = ctx.author
             try:
-                vc = user.voice.channel # Get the voice channel of the user
+                vc = user.voice.channel  # Get the voice channel of the user
                 if ctx.channel.id == vc.id and ctx.channel.id not in server_data.get("bannedTTSChannels", []):
                     # If the channel ID of the message matches the voice channel ID of the user
                     # and the channel ID is not in the bannedTTSChannels list, proceed with TTS
@@ -40,17 +43,17 @@ class Tts(commands.Cog):
                     speech = f"{user.display_name} пишет: {content_without_mentions}"
                     tts = gTTS(speech, lang="ru")
                     tts.save(tempfile)
-                    
+
                     audio = AudioSegment.from_mp3(tempfile)
                     # Speed up the audio by 30%
-                    new_file = speedup(audio,1.3,130)
+                    new_file = speedup(audio, 1.3, 130)
                     new_file.export(tempfile, format="mp3")
-                    ch.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=Path(".")/tempfile, **FFMPEG_OPTIONS))
+                    ch.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=Path(".") / tempfile, **FFMPEG_OPTIONS))
             except:
                 pass
         except:
             pass
-            
-    
+
+
 def setup(bot):
     bot.add_cog(Tts(bot, servers_data))

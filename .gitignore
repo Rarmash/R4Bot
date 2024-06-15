@@ -1,5 +1,5 @@
 __pycache__
-gears/__pycache__
+**/__pycache__
 bin/*
 *.exe
 .env

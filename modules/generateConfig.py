@@ -1,6 +1,7 @@
 import json
 from time import sleep
 
+
 # Function to check and create the servers file template if it doesn't exist
 def check_servers_file():
     servers_template = {
@@ -28,6 +29,6 @@ def check_servers_file():
     # Create and write the servers template to servers.json
     with open('servers.json', 'w') as f:
         json.dump(servers_template, f, indent=4)
-    print('Для продолжения, заполните файл servers.json.') # Print instructions for the user
-    sleep(5) # Sleep for 5 seconds to give the user time to read the instructions
-    exit() # Exit the program
+    print('Для продолжения, заполните файл servers.json.')  # Print instructions for the user
+    sleep(5)  # Sleep for 5 seconds to give the user time to read the instructions
+    exit()  # Exit the program

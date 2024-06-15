@@ -1,20 +1,19 @@
-from dotenv import load_dotenv
 from os import environ
-import pymongo
-import certifi
+
+from dotenv import load_dotenv
+
 from modules.generateConfig import *
 
 # Load environment variables from .env file
 load_dotenv()
 
-version = "1.0.1"
+version = "1.1"
 
 # Get environment variables
 token = environ.get('TOKEN')
 applicationID = environ.get('APPLICATIONID')
 fortniteapi = environ.get('FORTNITEAPI')
 xboxapi = environ.get('XBOXAPI')
-mongodb_link = environ.get('MONGODB')
 debugmode = environ.get('DEBUGMODE')
 
 try:
@@ -29,10 +28,3 @@ try:
 except FileNotFoundError:
     # If servers.json does not exist, call the function to create it
     check_servers_file()
-
-try:
-    # Try to create a MongoDB client with TLS/SSL using certifi
-    myclient = pymongo.MongoClient(mongodb_link, tlsCAFile=certifi.where())
-except:
-    # If an exception occurs (e.g., connection failure), try to create a MongoDB client with the provided MongoDB link
-    myclient = pymongo.MongoClient(mongodb_link)

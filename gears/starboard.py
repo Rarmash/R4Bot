@@ -1,6 +1,8 @@
 from discord.ext import commands
-from options import servers_data
 from discord.utils import get
+
+from options import servers_data
+
 
 class Starboard(commands.Cog):
     def __init__(self, bot, servers_data):
@@ -21,6 +23,7 @@ class Starboard(commands.Cog):
             # Check if the reaction count is equal to or greater than the required media_pins count
             if reaction and reaction.count >= server_data.get("media_pins"):
                 await message.pin()
-        
+
+
 def setup(bot):
     bot.add_cog(Starboard(bot, servers_data))

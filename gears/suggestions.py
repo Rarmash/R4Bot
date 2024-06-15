@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
-from options import myclient, servers_data
+
+from modules.firebase import create_record, update_record, get_all_records
+from options import servers_data
 
 
 class SuggestButtons(discord.ui.View):
@@ -25,34 +27,26 @@ class SuggestButtons(discord.ui.View):
         return True
 
     # Button callback for voting "За"
-    @discord.ui.button(label="За", style=discord.ButtonStyle.green, emoji="<:MinecraftAccept:936636758135828502>", custom_id='accept')
+    @discord.ui.button(label="За", style=discord.ButtonStyle.green, emoji="<:MinecraftAccept:936636758135828502>",
+                       custom_id='accept')
     async def accept_button_callback(self, button, interaction):
-        SuggestionsCollection = myclient[f"{str(interaction.guild.id)}"]["Suggestions"]
         self.data["accept_count"] += 1
         self.data["voted_users"].append(interaction.user.id)
         self.update_buttons()
         await interaction.response.edit_message(view=self)
 
-        # Update MongoDB data
-        SuggestionsCollection.update_one(
-            {"_id": self.suggestion_message_id},
-            {"$set": self.data},
-        )
+        update_record(str(interaction.guild.id), "Suggestions", str(self.suggestion_message_id), self.data)
 
     # Button callback for voting "Против"
-    @discord.ui.button(label="Против", style=discord.ButtonStyle.red, emoji="<:MinecraftDeny:936636758127439883>", custom_id='deny')
+    @discord.ui.button(label="Против", style=discord.ButtonStyle.red, emoji="<:MinecraftDeny:936636758127439883>",
+                       custom_id='deny')
     async def deny_button_callback(self, button, interaction):
-        SuggestionsCollection = myclient[f"{str(interaction.guild.id)}"]["Suggestions"]
         self.data["deny_count"] += 1
         self.data["voted_users"].append(interaction.user.id)
         self.update_buttons()
         await interaction.response.edit_message(view=self)
 
-        # Update MongoDB data
-        SuggestionsCollection.update_one(
-            {"_id": self.suggestion_message_id},
-            {"$set": self.data},
-        )
+        update_record(str(interaction.guild.id), "Suggestions", self.suggestion_message_id, self.data)
 
 
 class Suggest(commands.Cog):
@@ -64,12 +58,11 @@ class Suggest(commands.Cog):
     async def on_ready(self):
         # Fetch existing suggestion data from the database and add views for each suggestion
         for server_id, server_data in servers_data.items():
-            SuggestionsCollection = myclient[str(server_id)]["Suggestions"]
             channel = self.Bot.get_channel(server_data["suggestions_channel"])
             if channel:
-                all_suggestions = SuggestionsCollection.find()
-                for suggestion_data in all_suggestions:
-                    suggestion_message_id = suggestion_data["_id"]
+                all_suggestions = get_all_records(str(server_id), "Suggestions")
+                for key, suggestion_data in all_suggestions.items():
+                    suggestion_message_id = key
                     try:
                         suggestion_message = await channel.fetch_message(suggestion_message_id)
                         suggest_buttons = SuggestButtons(suggestion_message_id, suggestion_data)
@@ -82,8 +75,8 @@ class Suggest(commands.Cog):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
-        SuggestionsCollection = myclient[f"{str(ctx.guild.id)}"]["Suggestions"]
-        suggestEmbed = discord.Embed(title="Новое предложение", description=f"{question}", color=int(server_data.get("accent_color"), 16))
+        suggestEmbed = discord.Embed(title="Новое предложение", description=f"{question}",
+                                     color=int(server_data.get("accent_color"), 16))
         suggestEmbed.add_field(
             name='Автор',
             value=f'<@{ctx.author.id}>'
@@ -91,14 +84,13 @@ class Suggest(commands.Cog):
         # Send a message with the suggestion embed and get the response object
         suggestions_msg = await ctx.respond(embed=suggestEmbed)
         suggestions_message = await suggestions_msg.original_response()
-         # Prepare the data for the suggestion and insert it into the database
+        # Prepare the data for the suggestion and insert it into the database
         suggestion_data = {
-            "_id": suggestions_message.id,
             "accept_count": 0,
             "deny_count": 0,
             "voted_users": []
         }
-        SuggestionsCollection.insert_one(suggestion_data)
+        create_record(str(ctx.guild.id), "Suggestions", str(suggestions_message.id), suggestion_data)
         # Create the SuggestButtons view for the suggestion message and edit the message with it
         suggest_buttons = SuggestButtons(suggestions_message.id, suggestion_data)
         await suggestions_message.edit(view=suggest_buttons)

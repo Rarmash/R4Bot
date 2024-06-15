@@ -1,5 +1,9 @@
 import discord
-from options import token, debugmode, version, myclient, gearsList
+
+from modules.firebase import create_firebase_app
+from options import token, debugmode, version, gearsList
+
+create_firebase_app()
 
 # Define intents for the bot to receive all available events
 intents = discord.Intents.all()
@@ -15,9 +19,6 @@ bot = discord.Bot(case_insensitive=True, intents=intents)
 # Event that runs when the bot is ready and connected to Discord
 @bot.event
 async def on_ready():
-    # Connect to the MongoDB server
-    myclient
-    
     # Print bot information and connected guilds
     print("------")
     print(f"{bot.user.name} запущен!")
@@ -44,4 +45,5 @@ for module_name in gearsList:
         print(f"Не удалось загрузить общий модуль '{module_name}': {str(e)}")
 
 # Run the bot with the provided token
-bot.run(token)
+if __name__ == "__main__":
+    bot.run(token)

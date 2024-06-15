@@ -1,8 +1,10 @@
 import discord
-from discord.ext import commands
-from discord.commands import SlashCommandGroup
-from options import servers_data
 import requests
+from discord.commands import SlashCommandGroup
+from discord.ext import commands
+
+from options import servers_data
+
 
 class Steam(commands.Cog):
     def __init__(self, bot, servers_data):
@@ -13,7 +15,8 @@ class Steam(commands.Cog):
 
     # Command to get the price and information about a game with the given appid and countrycode
     @steam.command(description='Посмотреть статистику по игре')
-    async def price(self, ctx: discord.ApplicationContext, appid, countrycode: discord.Option(str, choices=['RU', 'US', 'TR', 'AR', 'DE', 'UA'])):
+    async def price(self, ctx: discord.ApplicationContext, appid,
+                    countrycode: discord.Option(str, choices=['RU', 'US', 'TR', 'AR', 'DE', 'UA'])):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
@@ -40,7 +43,7 @@ class Steam(commands.Cog):
             embed.add_field(name="Дата выпуска", value=app_data.get("release_date", {}).get("date", "Неизвестно"))
             embed.add_field(name="Разработчик", value=", ".join(app_data.get("developers", [])))
             embed.add_field(name="Издатель", value=", ".join(app_data.get("publishers", [])))
-            
+
             is_free = app_data.get("is_free", False)
             if is_free:
                 embed.add_field(name="Стоимость", value="Бесплатно")
@@ -62,6 +65,7 @@ class Steam(commands.Cog):
 
         except requests.RequestException:
             await ctx.respond("Ошибка при запросе к API Steam.")
-        
+
+
 def setup(bot):
     bot.add_cog(Steam(bot, servers_data))

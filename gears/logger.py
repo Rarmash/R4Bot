@@ -1,22 +1,29 @@
+import io
+
 import discord
 from discord.ext import commands
-from options import servers_data, myclient
-import io
+
+from modules.firebase import get_from_record, create_record, update_record
+from options import servers_data
+
+
+# Helper functions to check if a channel, user, or category is allowed
+def is_channel_allowed(channel_id, server_data):
+    return channel_id not in server_data.get("bannedChannels", [])
+
+
+def is_user_allowed(user_id, server_data):
+    return user_id not in server_data.get("bannedUsers", [])
+
+
+def is_category_allowed(category_id, server_data):
+    return category_id not in server_data.get("bannedCategories", [])
+
 
 class Logger(commands.Cog):
     def __init__(self, bot, servers_data):
         self.bot = bot
         self.servers_data = servers_data
-
-    # Helper functions to check if a channel, user, or category is allowed
-    def is_channel_allowed(self, channel_id, server_data):
-        return channel_id not in server_data.get("bannedChannels", [])
-
-    def is_user_allowed(self, user_id, server_data):
-        return user_id not in server_data.get("bannedUsers", [])
-
-    def is_category_allowed(self, category_id, server_data):
-        return category_id not in server_data.get("bannedCategories", [])
 
     # Listen for the on_message_delete event to log deleted messages
     @commands.Cog.listener()
@@ -34,13 +41,12 @@ class Logger(commands.Cog):
         # Get the log channel
         channel = self.bot.get_channel(server_data.get("log_channel"))
         author_id = str(ctx.author.id)
-        Collection = myclient[f"{str(ctx.guild.id)}"]["Users"]
-        user = Collection.find_one({"_id": author_id})
+        user = get_from_record(str(ctx.guild.id), "Users", author_id)
         if user:
             # Reduce the user's message count by 1
-            Collection.update_one({"_id": author_id}, {"$set": {"messages": user.get("messages", 0) - 1}})
+            update_record(str(ctx.guild.id), "Users", author_id, {"messages": user.get("messages", 0) - 1})
         else:
-            Collection.insert_one({"_id": author_id, "messages": -1, "timeouts": 0})
+            create_record(str(ctx.guild.id), "Users", author_id, {"messages": -1, "timeouts": 0})
 
         # Create an embed to log the deleted message
         embed = discord.Embed(

@@ -1,19 +1,23 @@
-import discord
-from discord.ext import commands
-from discord.commands import SlashCommandGroup
-from options import token, mongodb_link, fortniteapi, xboxapi, servers_data, applicationID
+import datetime
 import os
 import time
-import datetime
 from math import ceil
+
+import discord
+from discord.commands import SlashCommandGroup
+from discord.ext import commands
+
+from options import token, fortniteapi, xboxapi, servers_data, applicationID
+
+
 class Service(commands.Cog):
 
     def __init__(self, bot, servers_data):
         self.bot = bot
         self.servers_data = servers_data
-    
+
     service = SlashCommandGroup("service", "Сервисные команды")
-    
+
     # Slash command to view server information
     @commands.slash_command(description='Посмотреть карточку сервера')
     async def server(self, ctx):
@@ -21,15 +25,18 @@ class Service(commands.Cog):
         if not server_data:
             return
         guild = ctx.guild
-        embed = discord.Embed(title=f"Информация о сервере {guild}", color = int(server_data.get("accent_color"), 16))
+        embed = discord.Embed(title=f"Информация о сервере {guild}", color=int(server_data.get("accent_color"), 16))
         embed.set_thumbnail(url=guild.icon)
         embed.add_field(name="Описание", value=guild.description)
-        embed.add_field(name="Каналов", value=len(guild.channels))
-        embed.add_field(name="Ролей", value=len(guild.roles))
-        embed.add_field(name="Бустеров", value=len(guild.premium_subscribers))
-        embed.add_field(name="Участников", value=guild.member_count-len(([member for member in ctx.guild.members if member.bot])))
-        embed.add_field(name="Ботов", value=len(([member for member in ctx.guild.members if member.bot])))
-        embed.add_field(name="Создан", value=f"<t:{ceil(time.mktime(datetime.datetime.strptime(str(guild.created_at.strftime('%#d.%#m.%Y в %H:%M:%S')), '%d.%m.%Y в %H:%M:%S').timetuple()))}:f>")
+        embed.add_field(name="Каналов", value=str(len(guild.channels)))
+        embed.add_field(name="Ролей", value=str(len(guild.roles)))
+        embed.add_field(name="Бустеров", value=str(len(guild.premium_subscribers)))
+        embed.add_field(name="Участников",
+                        value=guild.member_count - len(([member for member in ctx.guild.members if member.bot])))
+        embed.add_field(name="Ботов", value=str(len(([member for member in ctx.guild.members if member.bot]))))
+        embed.add_field(name="Создан",
+                        value=f"<t:{ceil(time.mktime(datetime.datetime.strptime(str(guild.created_at.strftime(
+                            '%#d.%#m.%Y в %H:%M:%S')), '%d.%m.%Y в %H:%M:%S').timetuple()))}:f>")
         embed.add_field(name="Владелец", value=f"<@{guild.owner.id}>")
         await ctx.respond(embed=embed)
 
@@ -41,9 +48,11 @@ class Service(commands.Cog):
             return
         if ctx.author.id == server_data.get("admin_id"):
             await ctx.respond("Скинул в ЛС.")
-            await ctx.author.send(f'Токен бота: `{token}`\nApplication ID: `{applicationID}`\nБаза MongoDB: `{mongodb_link}`\nFortnite API: `{fortniteapi}`\nXbox API: `{xboxapi}`')
+            await ctx.author.send(
+                f'Токен бота: `{token}`\nApplication ID: `{applicationID}`\nFortnite API: `{fortniteapi}`\nXbox API: '
+                f'`{xboxapi}`')
         else:
-            await ctx.respond("Недостаточно прав для выполнения данной команды.")   
+            await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     # Subcommand to shut down the bot
     @service.command(description='Выключить бота')
@@ -93,6 +102,7 @@ class Service(commands.Cog):
             await ctx.respond(f"**gears.{gear}** перезапускается...")
         else:
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
+
 
 def setup(bot):
     bot.add_cog(Service(bot, servers_data))

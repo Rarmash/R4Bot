@@ -1,27 +1,29 @@
-# R4Bot ![Version](https://img.shields.io/badge/Latest-1.0.1/master-blue.svg)
+# R4Bot ![Version](https://img.shields.io/badge/Latest-1.1/master-blue.svg)
 Discord-бот, созданный для облегчения модерации серверов, и не только. Используются слэш-команды.
 
 ## 🛠️ Установка
 1. Клонируйте репозиторий:
-```BASH
-git clone https://github.com/Rarmash/R4bot.git
-```
+    ```BASH
+    git clone https://github.com/Rarmash/R4bot.git
+    ```
 2. Смените директорию:
-```BASH
-cd R4bot
-```
+    ```BASH
+    cd R4bot
+    ```
 3. Установите зависимости:
-```BASH
-pip install -r requirements.txt
-```
+    ```BASH
+    pip install -r requirements.txt
+    ```
 4. Загрузите и установите [FFMPEG](https://ffmpeg.org/) (как вариант - в корень проекта).
 
 5. Запустите файл Python:
-```BASH
-python main.py
-```
+    ```BASH
+    python main.py
+    ```
 
 6. Настройте бота через файлы servers.json и .env (шаблон - [.env_template](https://github.com/Rarmash/R4Bot/blob/master/.env_template)).
+
+7. Сгенерируйте ключ доступа к своему приложению [Firebase](https://console.firebase.google.com) (в панели управления: `Project Settings` -> `Service accounts` -> `Firebase Admin SDK` -> `Python`).
 
 ## 🛠️ О servers.json:
 Бот поддерживает нахождение на нескольких серверах. Просто продублируйте блок с настройками сервера и заполните его.
@@ -56,7 +58,6 @@ python main.py
 ```ENV
 TOKEN=           // Токен бота Discord
 APPLICATIONID=   // Application ID приложения бота с Discord Developer Portal
-MONGODB=         // Адрес для подключения к БД MongoDB
 FORTNITEAPI=     // Ключ API для получения данных с https://fortnite-api.com/
 XBOXAPI=         // Ключ API для получения данных с https://xbl.io/
 DEBUGMODE=OFF    // Значение DEBUG-режима

@@ -3,7 +3,8 @@ from discord.commands import SlashCommandGroup
 from discord.ext import commands
 from xpa import XPA
 
-from options import xboxapi, myclient
+from modules.firebase import get_from_record, update_record, search_record_id
+from options import xboxapi
 
 xpa = XPA(xboxapi)
 
@@ -21,7 +22,7 @@ def get_games_amount(xuid):
 def get_xbox_gamertag(ctx, gamertag):
     if not gamertag:
         author_id = str(ctx.author.id)
-        user_data = myclient[f"{str(ctx.guild.id)}"]["Users"].find_one({"_id": author_id})
+        user_data = get_from_record(str(ctx.guild.id), "Users", author_id)
         if user_data:
             gamertag = user_data.get("xbox")
 
@@ -36,12 +37,13 @@ class Xbox(commands.Cog):
 
     @xbox.command(description='Посмотреть статистику по пользователю')
     async def stats(self, ctx: discord.ApplicationContext, gamertag=None):
-        Collection = myclient[f"{str(ctx.guild.id)}"]["Users"]
+        user_record = get_from_record(str(ctx.guild.id), "Users", str(ctx.author.id))
         await ctx.defer()
         gamertag = get_xbox_gamertag(ctx, gamertag)
         if not gamertag:
             await ctx.respond(
-                "Вы не привязали профиль Xbox к учётной записи Discord. Сделайте это, используя команду `/xbox connect <Gamertag>`!",
+                "Вы не привязали профиль Xbox к учётной записи Discord. Сделайте это, используя команду `/xbox "
+                "connect <Gamertag>`!",
                 ephemeral=True)
             return
         try:
@@ -58,7 +60,7 @@ class Xbox(commands.Cog):
             embed.add_field(name="Друзей", value=gamer_info.followingCount)
             try:
                 title_count, recentgame, curscoreonrecgame, totalscoreonrecgame = get_games_amount(gamer_info.xuid)
-                embed.add_field(name="Сыграно игр", value=title_count)
+                embed.add_field(name="Сыграно игр", value=str(title_count))
                 embed.add_field(name="Недавно играл в",
                                 value=f"{recentgame} (🅖 {curscoreonrecgame}/{totalscoreonrecgame})")
             except IndexError:
@@ -66,10 +68,10 @@ class Xbox(commands.Cog):
             embed.add_field(name="Ссылка на профиль",
                             value=f"[Тык](https://account.xbox.com/ru-ru/Profile?Gamertag={str(gamer_info.gamertag).replace(' ', '%20')})")
             try:
-                embed.add_field(name="Владелец профиля", value=f"<@{Collection.find_one({'xbox': gamertag})['_id']}>")
+                embed.add_field(name="Владелец профиля", value=f"<@{search_record_id(str(ctx.guild.id), "Users", "xbox", gamertag)}>")
             except TypeError:
                 pass
-            if gamer_info.isXbox360Gamerpic == True:
+            if gamer_info.isXbox360Gamerpic:
                 embed.set_thumbnail(
                     url=f"http://avatar.xboxlive.com/avatar/{str(gamer_info.gamertag).replace(' ', '%20')}/avatarpic-l.png")
             else:
@@ -80,12 +82,11 @@ class Xbox(commands.Cog):
 
     @xbox.command(description='Привязать профиль Xbox к учётной записи Discord')
     async def connect(self, ctx: discord.ApplicationContext, gamertag):
-        Collection = myclient[f"{str(ctx.guild.id)}"]["Users"]
         await ctx.defer()
         author = str(ctx.author.id)
         try:
             user_info = xpa.get_account_info_gamertag(gamertag)
-            Collection.update_one({"_id": author}, {"$set": {"xbox": gamertag}})
+            update_record(str(ctx.guild.id), "Users", str(author), {"xbox": gamertag})
             embed = discord.Embed(description=f"Аккаунт {gamertag} был успешно привязан к вашей учётной записи!",
                                   color=int(user_info.preferredColor["primaryColor"], 16))
             embed.set_thumbnail(url=user_info.displayPicRaw)
