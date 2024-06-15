@@ -1,9 +1,10 @@
 import discord
 
-from modules.firebase import create_firebase_app
-from options import token, debugmode, version, gearsList, firebaseURL
+from modules.firebase import create_firebase_app, create_storage_app, get_file_from_storage
+from options import token, debugmode, version, gearsList, firebase_id
 
-create_firebase_app(firebaseURL)
+create_firebase_app(firebase_id)
+#  storage_obj = create_storage_app(firebase_id)
 
 # Define intents for the bot to receive all available events
 intents = discord.Intents.all()

@@ -1,4 +1,4 @@
-# R4Bot ![Version](https://img.shields.io/badge/Latest-1.1.2/master-blue.svg)
+# R4Bot ![Version](https://img.shields.io/badge/Latest-1.1.3/master-blue.svg)
 Discord-бот, созданный для облегчения модерации серверов, и не только. Используются слэш-команды.
 
 ## 🛠️ Установка
@@ -60,6 +60,5 @@ TOKEN=           // Токен бота Discord
 APPLICATIONID=   // Application ID приложения бота с Discord Developer Portal
 FORTNITEAPI=     // Ключ API для получения данных с https://fortnite-api.com/
 XBOXAPI=         // Ключ API для получения данных с https://xbl.io/
-FIREBASEURL=     // Адрес для подключения к БД Firebase Realtime
 DEBUGMODE=OFF    // Значение DEBUG-режима
 ```

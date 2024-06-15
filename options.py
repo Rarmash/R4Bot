@@ -7,14 +7,15 @@ from modules.generateConfig import *
 # Load environment variables from .env file
 load_dotenv()
 
-version = "1.1.2"
+version = "1.1.3"
 
 # Get environment variables
 token = environ.get('TOKEN')
 applicationID = environ.get('APPLICATIONID')
 fortniteapi = environ.get('FORTNITEAPI')
 xboxapi = environ.get('XBOXAPI')
-firebaseURL = environ.get('FIREBASEURL')
+with open("firebaseConfig.json", "r", encoding="utf8") as f:
+    firebase_id = json.load(f).get("project_id")
 debugmode = environ.get('DEBUGMODE')
 
 try:
