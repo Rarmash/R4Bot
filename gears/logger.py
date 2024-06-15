@@ -33,9 +33,9 @@ class Logger(commands.Cog):
             return
 
         # Check if the channel, user, and category are allowed
-        if not self.is_channel_allowed(ctx.channel.id, server_data) or \
-                not self.is_user_allowed(ctx.author.id, server_data) or \
-                not self.is_category_allowed(ctx.channel.category_id, server_data):
+        if not is_channel_allowed(ctx.channel.id, server_data) or \
+                not is_user_allowed(ctx.author.id, server_data) or \
+                not is_category_allowed(ctx.channel.category_id, server_data):
             return
 
         # Get the log channel
@@ -84,9 +84,9 @@ class Logger(commands.Cog):
             return
 
         # Check if the channel, user, and category are allowed, and the content is changed
-        if not self.is_channel_allowed(before.channel.id, server_data) or \
-                not self.is_user_allowed(before.author.id, server_data) or \
-                not self.is_category_allowed(before.channel.category_id, server_data) or \
+        if not is_channel_allowed(before.channel.id, server_data) or \
+                not is_user_allowed(before.author.id, server_data) or \
+                not is_category_allowed(before.channel.category_id, server_data) or \
                 before.content == after.content:
             return
 
