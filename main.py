@@ -1,9 +1,9 @@
 import discord
 
 from modules.firebase import create_firebase_app
-from options import token, debugmode, version, gearsList
+from options import token, debugmode, version, gearsList, firebaseURL
 
-create_firebase_app()
+create_firebase_app(firebaseURL)
 
 # Define intents for the bot to receive all available events
 intents = discord.Intents.all()
@@ -13,6 +13,7 @@ intents.messages = True
 
 # Create the Discord bot instance with specified intents
 bot = discord.Bot(case_insensitive=True, intents=intents)
+
 
 # Gears are always cool
 
@@ -27,7 +28,7 @@ async def on_ready():
     for guild in bot.guilds:
         print(f"Подключились к серверу: {guild}")
     print("------")
-    
+
     # Set bot status and activity based on debug mode
     if debugmode == "ON":
         status = discord.Status.dnd
@@ -36,6 +37,7 @@ async def on_ready():
         status = discord.Status.online
         activity = discord.Activity(type=discord.ActivityType.listening, name=f"обиды участников (v{version})")
     await bot.change_presence(status=status, activity=activity)
+
 
 for module_name in gearsList:
     try:

@@ -3,10 +3,10 @@ import json
 from firebase_admin import credentials, initialize_app, db
 
 
-def create_firebase_app():
-    cred_obj = credentials.Certificate("firebaseConfig.json", )
+def create_firebase_app(databaseURL: str):
+    cred_obj = credentials.Certificate("firebaseConfig.json")
     firebase = initialize_app(cred_obj,
-                              {"databaseURL": "https://r4bot-50baf-default-rtdb.firebaseio.com/"})
+                              {"databaseURL": databaseURL})
     return firebase
 
 

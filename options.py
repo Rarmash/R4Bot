@@ -7,13 +7,14 @@ from modules.generateConfig import *
 # Load environment variables from .env file
 load_dotenv()
 
-version = "1.1.1"
+version = "1.1.2"
 
 # Get environment variables
 token = environ.get('TOKEN')
 applicationID = environ.get('APPLICATIONID')
 fortniteapi = environ.get('FORTNITEAPI')
 xboxapi = environ.get('XBOXAPI')
+firebaseURL = environ.get('FIREBASEURL')
 debugmode = environ.get('DEBUGMODE')
 
 try:
