@@ -2,6 +2,7 @@ import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
 from xpa import XPA
+from xpa import ErrorHandler as Xbox_err
 
 from modules.firebase import get_from_record, update_record, search_record_id
 from options import xboxapi
@@ -36,7 +37,8 @@ class Xbox(commands.Cog):
     xbox = SlashCommandGroup("xbox", "Команды Xbox")
 
     @xbox.command(description='Посмотреть статистику по пользователю')
-    async def stats(self, ctx: discord.ApplicationContext, gamertag=None):
+    @discord.option("gamertag", description="Gamertag пользователя", required=False)
+    async def stats(self, ctx: discord.ApplicationContext, gamertag: str):
         await ctx.defer()
         gamertag = get_xbox_gamertag(ctx, gamertag)
         if not gamertag:
@@ -65,22 +67,25 @@ class Xbox(commands.Cog):
             except IndexError:
                 embed.add_field(name="Игровая статистика", value="Отсутствует, либо скрыта")
             embed.add_field(name="Ссылка на профиль",
-                            value=f"[Тык](https://account.xbox.com/ru-ru/Profile?Gamertag={str(gamer_info.gamertag).replace(' ', '%20')})")
+                            value=f"[Тык](https://www.xbox.com/ru-RU/play/user/{str(gamer_info.gamertag).replace(' ', '%20')})")
             try:
                 embed.add_field(name="Владелец профиля", value=f"<@{search_record_id(str(ctx.guild.id), "Users", "xbox", gamertag)}>")
             except IndexError:
                 pass
-            if gamer_info.isXbox360Gamerpic:
+            if gamer_info.isXbox360Gamerpic:  # TODO: rewrite, cuz this method is deprecated
                 embed.set_thumbnail(
                     url=f"http://avatar.xboxlive.com/avatar/{str(gamer_info.gamertag).replace(' ', '%20')}/avatarpic-l.png")
             else:
                 embed.set_thumbnail(url=gamer_info.displayPicRaw)
             await ctx.respond(embed=embed)
+        except Xbox_err.XboxApiNotFoundError:
+            await ctx.respond("❗ Игрок не найден...", ephemeral=True)
         except KeyError as e:
             await ctx.respond(f"❓ Возникла ошибка {e}...", ephemeral=True)
 
     @xbox.command(description='Привязать профиль Xbox к учётной записи Discord')
-    async def connect(self, ctx: discord.ApplicationContext, gamertag):
+    @discord.option("gamertag", description="Gamertag пользователя")
+    async def connect(self, ctx: discord.ApplicationContext, gamertag: str):
         await ctx.defer()
         author = str(ctx.author.id)
         try:

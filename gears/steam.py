@@ -14,9 +14,10 @@ class Steam(commands.Cog):
     steam = SlashCommandGroup("steam", "Команды по Steam")
 
     # Command to get the price and information about a game with the given appid and countrycode
-    @steam.command(description='Посмотреть статистику по игре')
-    async def price(self, ctx: discord.ApplicationContext, appid,
-                    countrycode: discord.Option(str, choices=['RU', 'US', 'TR', 'AR', 'DE', 'UA'])):
+    @steam.command(description='Посмотреть данные об игре')
+    @discord.option("appid", description="ID игры в Steam")
+    @discord.option("countrycode", description="Код страны", choices=['RU', 'US', 'TR', 'AR', 'DE', 'UA', 'KZ'])
+    async def price(self, ctx: discord.ApplicationContext, appid: int, countrycode: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
@@ -28,10 +29,12 @@ class Steam(commands.Cog):
             response.raise_for_status()
 
             # Parse the response JSON and extract the relevant data for the appid
-            app_data = response.json().get(appid, {}).get("data")
-            if not app_data:
-                await ctx.respond("Такой игры не существует!")
+            if not response.json()[f"{appid}"]["success"]:
+                await ctx.respond(
+                    f"Такой игры не существует, либо она недоступна в данном регионе (**{countrycode}**).")
                 return
+
+            app_data = response.json()[f"{appid}"]["data"]
 
             # Create an embed with information about the game
             embed = discord.Embed(

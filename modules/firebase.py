@@ -1,6 +1,6 @@
 import json
 
-from firebase_admin import credentials, initialize_app, db, storage, App
+from firebase_admin import credentials, initialize_app, db
 
 
 def create_firebase_app(databaseID: str):
@@ -8,14 +8,6 @@ def create_firebase_app(databaseID: str):
     firebase = initialize_app(cred_obj,
                               {"databaseURL": f"https://{databaseID}-default-rtdb.firebaseio.com/"})
     return firebase
-
-
-def create_storage_app(storageID: str):
-    cred_obj = credentials.Certificate("firebaseConfig.json")
-    storage = initialize_app(cred_obj,
-                             {"storageBucket": f"{storageID}.appspot.com"},
-                             name="Storage Database")
-    return storage
 
 
 def create_record(server_id, database, child: str, json_set):
@@ -71,9 +63,3 @@ def filter_records_by_quantity(server_id, database, child: str, quantity):
     records = records_ref.get()
     records = json.dumps(records)
     return records
-
-
-def get_file_from_storage(filename: str, app: App):
-    bucket = storage.bucket(app=app)
-    blob = bucket.blob(filename)
-    return blob.public_url

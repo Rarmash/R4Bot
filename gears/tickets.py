@@ -69,7 +69,8 @@ class Support(commands.Cog):
         self.servers_data = servers_data
 
     @commands.slash_command(description='Отправить Тикет')
-    async def ticket(self, ctx, text):
+    @discord.option("text", description="Причина")
+    async def ticket(self, ctx, text: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return

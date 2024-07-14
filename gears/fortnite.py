@@ -35,7 +35,8 @@ class Fortnite(commands.Cog):
 
     # Command to view Fortnite stats for a player
     @fortnite.command(description='Посмотреть статистику по игроку')
-    async def stats(self, ctx: discord.ApplicationContext, username=None):
+    @discord.option("username", description="Имя игрока", required=False)
+    async def stats(self, ctx: discord.ApplicationContext, username: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
@@ -120,7 +121,8 @@ class Fortnite(commands.Cog):
         await ctx.respond(embed=embed)
 
     @fortnite.command(description='Привязать профиль Fortnite к учётной записи Discord')
-    async def connect(self, ctx: discord.ApplicationContext, username):
+    @discord.option("username", description="Имя игрока")
+    async def connect(self, ctx: discord.ApplicationContext, username: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return

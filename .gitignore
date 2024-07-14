@@ -8,3 +8,4 @@ bin/*
 speech.mp3
 *.json
 .venv
+venv

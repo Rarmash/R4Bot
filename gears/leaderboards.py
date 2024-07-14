@@ -23,10 +23,10 @@ class Leaderboards(commands.Cog):
         self.bot = bot
         self.servers_data = servers_data
 
-    leaderboardcmd = SlashCommandGroup("leaderboard", "Таблицы лидеров")
+    leaderboard_cmd = SlashCommandGroup("leaderboard", "Таблицы лидеров")
 
     # Slash command to view the leaderboard for timeouts
-    @leaderboardcmd.command(description='Посмотреть таблицу лидеров по тайм-аутам')
+    @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по тайм-аутам')
     async def timeouts(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
@@ -56,7 +56,7 @@ class Leaderboards(commands.Cog):
         await ctx.respond(embed=embed)
 
     # Command to view the leaderboard for messages
-    @leaderboardcmd.command(description='Посмотреть таблицу лидеров по сообщениям')
+    @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по сообщениям')
     async def messages(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:

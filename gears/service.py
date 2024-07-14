@@ -67,8 +67,9 @@ class Service(commands.Cog):
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     # Subcommand to unload a gear
-    @service.command()
-    async def unload(self, ctx, gear):
+    @service.command(description='Выгрузить модуль')
+    @discord.option("gear", description="Название модуля")
+    async def unload(self, ctx, gear: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
@@ -79,8 +80,9 @@ class Service(commands.Cog):
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     # Subcommand to load a gear
-    @service.command()
-    async def load(self, ctx, gear):
+    @service.command(description='Загрузить модуль')
+    @discord.option("gear", description="Название модуля")
+    async def load(self, ctx, gear: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
@@ -91,8 +93,9 @@ class Service(commands.Cog):
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     # Subcommand to reload a gear
-    @service.command()
-    async def reload(self, ctx, gear):
+    @service.command(description='Перезагрузить модуль')
+    @discord.option("gear", description="Название модуля")
+    async def reload(self, ctx, gear: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
