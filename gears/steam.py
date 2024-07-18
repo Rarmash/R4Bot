@@ -103,7 +103,12 @@ class Steam(commands.Cog):
             'steam_id': steamid64,
             'url': url_or_username,
             'key': options.steamapi
-        }).json()
+        })
+        if response.status_code == 200:
+            response = response.json()
+        else:
+            await ctx.respond(f"При получении данных возникла ошибка **{response.status_code}**.\nВозможно, вы неверно указали данные.")
+            return
 
         embed = discord.Embed(
             title=f"Карточка игрока {response['personaname']}",
@@ -145,7 +150,12 @@ class Steam(commands.Cog):
             'steam_id': steamid64,
             'url': url_or_username,
             'key': options.steamapi
-        }).json()
+        })
+        if response.status_code == 200:
+            response = response.json()
+        else:
+            await ctx.respond(f"При добавлении возникла ошибка **{response.status_code}**.\nВозможно, вы неверно указали данные.")
+            return
 
         update_record(str(ctx.guild.id), "Users", author_id, {"steam": str(response["steamid"])})
 
