@@ -68,9 +68,11 @@ class Profile(commands.Cog):
                 embed.add_field(name="Всего тайм-аутов", value=user_data['timeouts'])
                 if "xbox" in user_data:
                     embed.add_field(name="Профиль Xbox",
-                                    value=f"[{user_data['xbox']}](https://account.xbox.com/ru-ru/Profile?Gamertag={str(user_data['xbox']).replace(' ', '%20')})")
+                                    value=f"[{user_data['xbox']}](https://www.xbox.com/ru-RU/play/user/{str(user_data['xbox']).replace(' ', '%20')})")
                 if "fortnite" in user_data:
                     embed.add_field(name="Профиль Fortnite", value=user_data['fortnite'])
+                if "steam" in user_data:
+                    embed.add_field(name="Профиль Steam", value=f"[Тык](https://steamcommunity.com/profiles/{user_data['steam']})")
             if discord.utils.get(ctx.guild.roles, id=server_data.get("insider_id")) in user.roles:
                 embed.set_footer(text="Принимает участие в тестировании и помогает серверу стать лучше")
             embed.set_thumbnail(url=user.avatar)

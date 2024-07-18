@@ -122,6 +122,7 @@ class Fortnite(commands.Cog):
 
     @fortnite.command(description='Привязать профиль Fortnite к учётной записи Discord')
     @discord.option("username", description="Имя игрока")
+    @discord.guild_only()
     async def connect(self, ctx: discord.ApplicationContext, username: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:

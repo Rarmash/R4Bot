@@ -15,16 +15,11 @@ class Mod(commands.Cog):
     mod = SlashCommandGroup("mod", "Команды модерации")
 
     @mod.command(description='Забанить аутягу')
+    @discord.default_permissions(ban_members=True)
+    @discord.guild_only()
     async def ban(self, ctx, member: discord.Member, reason=None):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
-            return
-        # Check if the command invoker has the required role to ban
-        if not (discord.utils.get(ctx.guild.roles,
-                                  id=server_data.get("elder_mod_role_id")) in ctx.user.roles or discord.utils.get(
-                ctx.guild.roles, id=server_data.get("admin_role_id")) in ctx.user.roles):
-            await ctx.respond(
-                f'У вас нет прав на бан пользователя. Для бана обратитесь к <@&{server_data.get("elder_mod_role_id")}>.')
             return
         # Send a private message to the banned user and ban them from the server
         embed = discord.Embed(
@@ -39,16 +34,11 @@ class Mod(commands.Cog):
         await ctx.respond(embed=embed)
 
     @mod.command(description='Забанить аутягу по ID')
+    @discord.default_permissions(ban_members=True)
+    @discord.guild_only()
     async def banid(self, ctx, identificator, reason):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
-            return
-        # Check if the user has appropriate roles to perform the ban
-        if not (discord.utils.get(ctx.guild.roles,
-                                  id=server_data.get("elder_mod_role_id")) in ctx.user.roles or discord.utils.get(
-                ctx.guild.roles, id=server_data.get("admin_role_id")) in ctx.user.roles):
-            await ctx.respond(
-                f'У вас нет прав на бан пользователя. Для бана обратитесь к <@&{server_data.get("elder_mod_role_id")}>.')
             return
         # Fetch the user based on the provided ID, ban the user, and respond with a confirmation message
         member = await self.client.fetch_user(identificator)
@@ -60,16 +50,11 @@ class Mod(commands.Cog):
         await ctx.respond(embed=embed)
 
     @mod.command(description='Кикнуть аутягу')
+    @discord.default_permissions(kick_members=True)
+    @discord.guild_only()
     async def kick(self, ctx, member: discord.Member, reason):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
-            return
-        # Check if the user has appropriate roles to perform the kick
-        if not (discord.utils.get(ctx.guild.roles,
-                                  id=server_data.get("elder_mod_role_id")) in ctx.user.roles or discord.utils.get(
-                ctx.guild.roles, id=server_data.get("admin_role_id")) in ctx.user.roles):
-            await ctx.respond(
-                f'У вас нет прав на кик пользователя. Для бана обратитесь к <@&{server_data.get("elder_mod_role_id")}>.')
             return
         # Kick the user and respond with a confirmation message
         await member.kick(reason=f"{ctx.author}: {reason}")
@@ -80,6 +65,8 @@ class Mod(commands.Cog):
         await ctx.respond(embed=embed)
 
     @mod.command(description='Замьютить аутягу')
+    @discord.default_permissions(mute_members=True)
+    @discord.guild_only()
     async def timeout(self, ctx, member: discord.Member, reason,
                       days: discord.Option(int, max_value=27, default=0, required=False),
                       hours: discord.Option(int, max_value=23, default=0, required=False),

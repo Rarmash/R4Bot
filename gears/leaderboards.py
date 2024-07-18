@@ -27,6 +27,7 @@ class Leaderboards(commands.Cog):
 
     # Slash command to view the leaderboard for timeouts
     @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по тайм-аутам')
+    @discord.guild_only()
     async def timeouts(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
@@ -57,6 +58,7 @@ class Leaderboards(commands.Cog):
 
     # Command to view the leaderboard for messages
     @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по сообщениям')
+    @discord.guild_only()
     async def messages(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:

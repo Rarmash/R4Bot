@@ -53,17 +53,17 @@ class Xbox(commands.Cog):
                                   color=int(gamer_info.preferredColor["primaryColor"], 16))
             embed.add_field(name="Gamerscore", value=f"🅖 {gamer_info.gamerScore}")
             if gamer_info.accountTier == "Gold":
-                goldstatus = "Активен"
+                gold_status = "Активен"
             else:
-                goldstatus = "Не активен"
-            embed.add_field(name="Статус Game Pass Core", value=goldstatus)
+                gold_status = "Не активен"
+            embed.add_field(name="Статус Game Pass Core", value=gold_status)
             embed.add_field(name="Фолловеров", value=gamer_info.followerCount)
             embed.add_field(name="Друзей", value=gamer_info.followingCount)
             try:
-                title_count, recentgame, curscoreonrecgame, totalscoreonrecgame = get_games_amount(gamer_info.xuid)
+                title_count, recent_game, currentScoreOnRecentGame, totalScoreOnRecentGame = get_games_amount(gamer_info.xuid)
                 embed.add_field(name="Сыграно игр", value=str(title_count))
                 embed.add_field(name="Недавно играл в",
-                                value=f"{recentgame} (🅖 {curscoreonrecgame}/{totalscoreonrecgame})")
+                                value=f"{recent_game} (🅖 {currentScoreOnRecentGame}/{totalScoreOnRecentGame})")
             except IndexError:
                 embed.add_field(name="Игровая статистика", value="Отсутствует, либо скрыта")
             embed.add_field(name="Ссылка на профиль",
@@ -85,6 +85,7 @@ class Xbox(commands.Cog):
 
     @xbox.command(description='Привязать профиль Xbox к учётной записи Discord')
     @discord.option("gamertag", description="Gamertag пользователя")
+    @discord.guild_only()
     async def connect(self, ctx: discord.ApplicationContext, gamertag: str):
         await ctx.defer()
         author = str(ctx.author.id)

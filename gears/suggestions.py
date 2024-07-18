@@ -12,6 +12,7 @@ class Suggest(commands.Cog):
     @commands.slash_command(description="Предложить идею")
     @discord.option("suggestion", description="Ваше предложение")
     @discord.option("duration", description="Время голосования (в часах)", default=24)
+    @discord.guild_only()
     async def suggest(self, ctx: discord.ApplicationContext, suggestion: str, duration: int):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:

@@ -20,6 +20,7 @@ class Service(commands.Cog):
 
     # Slash command to view server information
     @commands.slash_command(description='Посмотреть карточку сервера')
+    @discord.guild_only()
     async def server(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:

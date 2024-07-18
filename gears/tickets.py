@@ -18,9 +18,9 @@ class TicketButtons(discord.ui.View):
         server_data = self.servers_data.get(str(interaction.guild.id))
         if not server_data:
             return
-        # Check if the user has either the elder_mod_role_id or admin_role_id
+        # Check if the user has either the mod_role_id or admin_role_id
         if not (discord.utils.get(interaction.guild.roles, id=server_data.get(
-                "elder_mod_role_id")) in interaction.user.roles or discord.utils.get(interaction.guild.roles,
+                "mod_role_id")) in interaction.user.roles or discord.utils.get(interaction.guild.roles,
                                                                                      id=server_data.get(
                                                                                              "admin_role_id")) in interaction.user.roles):
             await interaction.response.send_message("У вас нет прав для выполнения данной команды.", ephemeral=True)
@@ -85,7 +85,7 @@ class Support(commands.Cog):
         await channel.set_permissions(ctx.author, speak=True, send_messages=True, read_message_history=True,
                                       read_messages=True)
         # Send messages to the new ticket channel and add the TicketButtons view
-        await channel.send(f'<@&{server_data.get("elder_mod_role_id")}>ы, надо обкашлять пару вопросиков.', embed=embed,
+        await channel.send(f'<@&{server_data.get("mod_role_id")}>ы, надо обкашлять пару вопросиков.', embed=embed,
                            view=TicketButtons(self.Bot, servers_data))
         await channel.send(f'<@{ctx.author.id}>, вам слово.')
         # Send a response to the command author indicating the successful ticket creation
