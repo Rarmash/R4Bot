@@ -88,9 +88,11 @@ class Leaderboards(commands.Cog):
             if user[0] == user_id and i >= 10:
                 embed.add_field(name="Ваше положение в таблице", value=f'{i + 1}. <@{user[0]}>: {user[1]}\n')
                 break
+            elif user[0] == user_id:
+                break
 
         # Set the footer text based on the number of users in the leaderboard
-        if len(new_leaderboard) <= 10:
+        if len(new_leaderboard) <= 10 or i + 1 <= 10:
             embed.set_footer(text=f"Всего отправлено {kolvo} сообщений")
         else:
             place10 = new_leaderboard[9][1]
