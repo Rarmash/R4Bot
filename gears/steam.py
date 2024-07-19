@@ -18,6 +18,15 @@ def get_steam_id(ctx, steamid64):
     return steamid64
 
 
+def get_steam_response(steamid64: str = None, url_or_username: str = None):
+    response = requests.get("https://www.steamwebapi.com/steam/api/profile", params={
+        'steam_id': steamid64,
+        'url': url_or_username,
+        'key': options.steamapi
+    })
+    return response
+
+
 class Steam(commands.Cog):
     def __init__(self, bot, servers_data):
         self.bot = bot
@@ -99,15 +108,12 @@ class Steam(commands.Cog):
                 "`/steam connect`!")
             return
 
-        response = requests.get("https://www.steamwebapi.com/steam/api/profile", params={
-            'steam_id': steamid64,
-            'url': url_or_username,
-            'key': options.steamapi
-        })
+        response = get_steam_response(steamid64=steamid64, url_or_username=url_or_username)
         if response.status_code == 200:
             response = response.json()
         else:
-            await ctx.respond(f"При получении данных возникла ошибка **{response.status_code}**.\nВозможно, вы неверно указали данные.")
+            await ctx.respond(
+                f"При получении данных возникла ошибка **{response.status_code}**.\nВозможно, вы неверно указали данные.")
             return
 
         embed = discord.Embed(
@@ -146,15 +152,12 @@ class Steam(commands.Cog):
         await ctx.defer()
         author_id = str(ctx.author.id)
 
-        response = requests.get("https://www.steamwebapi.com/steam/api/profile", params={
-            'steam_id': steamid64,
-            'url': url_or_username,
-            'key': options.steamapi
-        })
+        response = get_steam_response(steamid64=steamid64, url_or_username=url_or_username)
         if response.status_code == 200:
             response = response.json()
         else:
-            await ctx.respond(f"При добавлении возникла ошибка **{response.status_code}**.\nВозможно, вы неверно указали данные.")
+            await ctx.respond(
+                f"При добавлении возникла ошибка **{response.status_code}**.\nВозможно, вы неверно указали данные.")
             return
 
         update_record(str(ctx.guild.id), "Users", author_id, {"steam": str(response["steamid"])})

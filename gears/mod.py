@@ -27,11 +27,16 @@ class Mod(commands.Cog):
             color=int(server_data.get("accent_color"), 16)
         )
         try:
-            await member.send(embed=embed)
-        except:
-            pass
-        await member.ban(reason=f"{ctx.author.display_name}: {reason}")
-        await ctx.respond(embed=embed)
+            try:
+                await member.send(embed=embed)
+            except:
+                pass
+            await member.ban(reason=f"{ctx.author.display_name}: {reason}")
+            await ctx.respond(embed=embed)
+        except discord.errors.Forbidden:
+            await ctx.respond(
+                f'У вас нет прав на бан пользователя. Для бана обратитесь к <@&{server_data.get("mod_role_id")}>.',
+                ephemeral=True)
 
     @mod.command(description='Забанить аутягу по ID')
     @discord.default_permissions(ban_members=True)
@@ -42,12 +47,17 @@ class Mod(commands.Cog):
             return
         # Fetch the user based on the provided ID, ban the user, and respond with a confirmation message
         member = await self.client.fetch_user(identificator)
-        await ctx.guild.ban(member, reason=f"{ctx.author.display_name}: {reason}")
-        embed = discord.Embed(
-            description=f'<@{identificator}>, пошёл нахуй из интернета.\n**Бан по причине**: {reason}.',
-            color=int(server_data.get("accent_color"), 16)
-        )
-        await ctx.respond(embed=embed)
+        try:
+            await ctx.guild.ban(member, reason=f"{ctx.author.display_name}: {reason}")
+            embed = discord.Embed(
+                description=f'<@{identificator}>, пошёл нахуй из интернета.\n**Бан по причине**: {reason}.',
+                color=int(server_data.get("accent_color"), 16)
+            )
+            await ctx.respond(embed=embed)
+        except discord.errors.Forbidden:
+            await ctx.respond(
+                f'У вас нет прав на бан пользователя. Для бана обратитесь к <@&{server_data.get("mod_role_id")}>.',
+                ephemeral=True)
 
     @mod.command(description='Кикнуть аутягу')
     @discord.default_permissions(kick_members=True)
@@ -56,13 +66,19 @@ class Mod(commands.Cog):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
-        # Kick the user and respond with a confirmation message
-        await member.kick(reason=f"{ctx.author}: {reason}")
-        embed = discord.Embed(
-            description=f'<@{member.id}>, пошёл нахуй из интернета.\n**Кик по причине**: {reason}.',
-            color=int(server_data.get("accent_color"), 16)
-        )
-        await ctx.respond(embed=embed)
+
+        try:
+            # Kick the user and respond with a confirmation message
+            await member.kick(reason=f"{ctx.author}: {reason}")
+            embed = discord.Embed(
+                description=f'<@{member.id}>, пошёл нахуй из интернета.\n**Кик по причине**: {reason}.',
+                color=int(server_data.get("accent_color"), 16)
+            )
+            await ctx.respond(embed=embed)
+        except discord.errors.Forbidden:
+            await ctx.respond(
+                f'У вас нет прав на кик пользователя. Для кика обратитесь к <@&{server_data.get("mod_role_id")}>.',
+                ephemeral=True)
 
     @mod.command(description='Замьютить аутягу')
     @discord.default_permissions(mute_members=True)
@@ -76,17 +92,22 @@ class Mod(commands.Cog):
         if not server_data:
             return
         # Calculate the total duration in seconds
-        duration = timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
-        if duration.total_seconds() != 0:
-            # Timeout the user for the specified duration and respond with a confirmation message
-            await member.timeout_for(duration, reason=f"{ctx.author}: {reason}")
-            embed = discord.Embed(
-                description=f"<@{member.id}> в тайм-ауте на {days} дней {hours} часов {minutes} минут {seconds} секунд.\nПричина: {reason}.",
-                color=int(server_data.get("accent_color"), 16)
-            )
-            await ctx.respond(embed=embed)
-        else:
-            await ctx.respond("Вы не можете отправить пользователя в тайм-аут без определения срока!", ephemeral=True)
+        try:
+            duration = timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+            if duration.total_seconds() != 0:
+                # Timeout the user for the specified duration and respond with a confirmation message
+                await member.timeout_for(duration, reason=f"{ctx.author}: {reason}")
+                embed = discord.Embed(
+                    description=f"<@{member.id}> в тайм-ауте на {days} дней {hours} часов {minutes} минут {seconds} секунд.\nПричина: {reason}.",
+                    color=int(server_data.get("accent_color"), 16)
+                )
+                await ctx.respond(embed=embed)
+            else:
+                await ctx.respond("Вы не можете отправить пользователя в тайм-аут без определения срока!", ephemeral=True)
+        except discord.errors.Forbidden:
+            await ctx.respond(
+                f'У вас нет прав на мьют пользователя. Для выдачи таймаута обратитесь к <@&{server_data.get("mod_role_id")}>.',
+                ephemeral=True)
 
 
 def setup(bot):
