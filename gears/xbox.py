@@ -69,7 +69,7 @@ class Xbox(commands.Cog):
             embed.add_field(name="Ссылка на профиль",
                             value=f"[Тык](https://www.xbox.com/ru-RU/play/user/{str(gamer_info.gamertag).replace(' ', '%20')})")
             try:
-                embed.add_field(name="Владелец профиля", value=f"<@{search_record_id(str(ctx.guild.id), "Users", "xbox", gamertag)}>")
+                embed.add_field(name="Владелец профиля", value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'xbox', gamertag)}>")
             except IndexError:
                 pass
             if gamer_info.isXbox360Gamerpic:  # TODO: rewrite, cuz this method is deprecated

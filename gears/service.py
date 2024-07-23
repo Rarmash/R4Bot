@@ -36,8 +36,7 @@ class Service(commands.Cog):
                         value=guild.member_count - len(([member for member in ctx.guild.members if member.bot])))
         embed.add_field(name="Ботов", value=str(len(([member for member in ctx.guild.members if member.bot]))))
         embed.add_field(name="Создан",
-                        value=f"<t:{ceil(time.mktime(datetime.datetime.strptime(str(guild.created_at.strftime(
-                            '%#d.%#m.%Y в %H:%M:%S')), '%d.%m.%Y в %H:%M:%S').timetuple()))}:f>")
+                        value=f"<t:{ceil(time.mktime(datetime.datetime.strptime(str(guild.created_at.strftime('%#d.%#m.%Y в %H:%M:%S')), '%d.%m.%Y в %H:%M:%S').timetuple()))}:f>")
         embed.add_field(name="Владелец", value=f"<@{guild.owner.id}>")
         await ctx.respond(embed=embed)
 

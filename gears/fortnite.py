@@ -94,7 +94,7 @@ class Fortnite(commands.Cog):
             # Add the owner of the profile if available in the database
             try:
                 embed.add_field(name="Владелец профиля",
-                                value=f"<@{search_record_id(str(ctx.guild.id), "Users", "fortnite", username)}>")
+                                value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'fortnite', username)}>")
             except IndexError:
                 pass
             await ctx.respond(embed=embed)
