@@ -163,7 +163,7 @@ class Steam(commands.Cog):
         update_record(str(ctx.guild.id), "Users", author_id, {"steam": str(response["steamid"])})
 
         embed = discord.Embed(
-            description=f"Аккаунт **{response["personaname"]}** был успешно привязан к вашей учётной записи!",
+            description=f"Аккаунт **{response['personaname']}** был успешно привязан к вашей учётной записи!",
             color=int(server_data.get("accent_color"), 16))
         embed.set_thumbnail(url=response['avatarfull'])
         await ctx.respond(embed=embed)
