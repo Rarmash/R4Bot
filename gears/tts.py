@@ -30,7 +30,7 @@ class Tts(commands.Cog):
                 if ctx.channel.id == vc.id and ctx.channel.id not in server_data.get("bannedTTSChannels", []):
                     # If the channel ID of the message matches the voice channel ID of the user
                     # and the channel ID is not in the bannedTTSChannels list, proceed with TTS
-                    tempfile = "speech.mp3"
+                    temp_file = "speech.mp3"
                     try:
                         ch = await vc.connect()
                     except discord.errors.ClientException:
@@ -42,13 +42,13 @@ class Tts(commands.Cog):
                     # Create the TTS speech with the user's display name and the content without mentions
                     speech = f"{user.display_name} пишет: {content_without_mentions}"
                     tts = gTTS(speech, lang="ru")
-                    tts.save(tempfile)
+                    tts.save(temp_file)
 
-                    audio = AudioSegment.from_mp3(tempfile)
+                    audio = AudioSegment.from_mp3(temp_file)
                     # Speed up the audio by 30%
                     new_file = speedup(audio, 1.3, 130)
-                    new_file.export(tempfile, format="mp3")
-                    ch.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=Path(".") / tempfile, **FFMPEG_OPTIONS))
+                    new_file.export(temp_file, format="mp3")
+                    ch.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=Path(".") / temp_file, **FFMPEG_OPTIONS))
             except:
                 pass
         except:

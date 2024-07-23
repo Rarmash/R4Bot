@@ -23,10 +23,11 @@ class Leaderboards(commands.Cog):
         self.bot = bot
         self.servers_data = servers_data
 
-    leaderboardcmd = SlashCommandGroup("leaderboard", "Таблицы лидеров")
+    leaderboard_cmd = SlashCommandGroup("leaderboard", "Таблицы лидеров")
 
     # Slash command to view the leaderboard for timeouts
-    @leaderboardcmd.command(description='Посмотреть таблицу лидеров по тайм-аутам')
+    @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по тайм-аутам')
+    @discord.guild_only()
     async def timeouts(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
@@ -56,7 +57,8 @@ class Leaderboards(commands.Cog):
         await ctx.respond(embed=embed)
 
     # Command to view the leaderboard for messages
-    @leaderboardcmd.command(description='Посмотреть таблицу лидеров по сообщениям')
+    @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по сообщениям')
+    @discord.guild_only()
     async def messages(self, ctx):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
@@ -86,9 +88,11 @@ class Leaderboards(commands.Cog):
             if user[0] == user_id and i >= 10:
                 embed.add_field(name="Ваше положение в таблице", value=f'{i + 1}. <@{user[0]}>: {user[1]}\n')
                 break
+            elif user[0] == user_id:
+                break
 
         # Set the footer text based on the number of users in the leaderboard
-        if len(new_leaderboard) <= 10:
+        if len(new_leaderboard) <= 10 or i + 1 <= 10:
             embed.set_footer(text=f"Всего отправлено {kolvo} сообщений")
         else:
             place10 = new_leaderboard[9][1]

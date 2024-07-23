@@ -1,4 +1,4 @@
-py-cord[voice]==2.5.0
+py-cord[voice]==2.6.0
 # py-cord @ git+https://github.com/pycord/pycord-v3 # Preparing for Pycord v3
 python-dotenv==1.0.1
 dnspython==2.6.1
@@ -6,6 +6,6 @@ requests==2.32.0
 gtts==2.5.1
 pydub==0.25.1
 asyncio==3.4.3
-xbox-python-api==0.1.2.4
+xbox-python-api==0.2
 firebase==4.0.1
 firebase-admin==6.5.0

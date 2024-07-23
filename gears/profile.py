@@ -20,6 +20,18 @@ class BotLink(discord.ui.View):
         self.add_item(invite_button)
 
 
+# Function to get the status emoji based on the user's status
+def get_status_emoji(status):
+    if status == discord.Status.online:
+        return "🟢 в сети"
+    elif status == discord.Status.offline:
+        return "⚪ не в сети"
+    elif status == discord.Status.idle:
+        return "🌙 не активен"
+    elif status == discord.Status.dnd:
+        return "⛔ не беспокоить"
+
+
 class Profile(commands.Cog):
     def __init__(self, bot, servers_data):
         self.Bot = bot
@@ -27,6 +39,7 @@ class Profile(commands.Cog):
 
     # Define the profile slash command
     @commands.slash_command(description='Посмотреть карточку профиля')
+    @discord.option("user", description="Пользователь", required=False)
     async def profile(self, ctx: discord.ApplicationContext, user: discord.Member = None):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
@@ -36,7 +49,7 @@ class Profile(commands.Cog):
             user = ctx.author
 
         # Get the status emoji based on the user's status
-        status = self.get_status_emoji(user.status)
+        status = get_status_emoji(user.status)
 
         # Fetch user data from the database
         user_data = get_from_record(str(ctx.guild.id), "Users", str(user.id))
@@ -55,9 +68,11 @@ class Profile(commands.Cog):
                 embed.add_field(name="Всего тайм-аутов", value=user_data['timeouts'])
                 if "xbox" in user_data:
                     embed.add_field(name="Профиль Xbox",
-                                    value=f"[{user_data['xbox']}](https://account.xbox.com/ru-ru/Profile?Gamertag={str(user_data['xbox']).replace(' ', '%20')})")
+                                    value=f"[{user_data['xbox']}](https://www.xbox.com/ru-RU/play/user/{str(user_data['xbox']).replace(' ', '%20')})")
                 if "fortnite" in user_data:
                     embed.add_field(name="Профиль Fortnite", value=user_data['fortnite'])
+                if "steam" in user_data:
+                    embed.add_field(name="Профиль Steam", value=f"[Тык](https://steamcommunity.com/profiles/{user_data['steam']})")
             if discord.utils.get(ctx.guild.roles, id=server_data.get("insider_id")) in user.roles:
                 embed.set_footer(text="Принимает участие в тестировании и помогает серверу стать лучше")
             embed.set_thumbnail(url=user.avatar)
@@ -79,17 +94,6 @@ class Profile(commands.Cog):
             embed.add_field(name="Версия Pycord", value=discord.__version__)
             embed.set_thumbnail(url=user.avatar)
             await ctx.respond(embed=embed, view=BotLink())
-
-    # Function to get the status emoji based on the user's status
-    def get_status_emoji(self, status):
-        if status == discord.Status.online:
-            return "🟢 в сети"
-        elif status == discord.Status.offline:
-            return "⚪ не в сети"
-        elif status == discord.Status.idle:
-            return "🌙 не активен"
-        elif status == discord.Status.dnd:
-            return "⛔ не беспокоить"
 
 
 def setup(bot):
