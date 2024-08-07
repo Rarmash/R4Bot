@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import discord
 
 from modules.firebase import create_firebase_app
@@ -22,6 +24,7 @@ bot = discord.Bot(case_insensitive=True, intents=intents)
 async def on_ready():
     # Print bot information and connected guilds
     print("------")
+    print(f"Текущее время: {datetime.now()}")
     print(f"{bot.user.name} запущен!")
     print(f"Версия: {version}")
     print(f"ID бота: {str(bot.user.id)}")

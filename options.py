@@ -7,7 +7,7 @@ from modules.generateConfig import *
 # Load environment variables from .env file
 load_dotenv()
 
-version = "1.2"
+version = "1.3"
 
 # Get environment variables
 token = environ.get('TOKEN')

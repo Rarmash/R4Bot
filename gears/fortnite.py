@@ -8,15 +8,32 @@ from options import fortniteapi, servers_data
 
 
 # Helper function to make a request to the Fortnite API
-def fortnite_api_request(username):
+def fortnite_api_request_by_id(accountId):
+    request_url = f"https://fortnite-api.com/v2/stats/br/v2/{accountId}"
+    response = requests.get(request_url, headers={"Authorization": fortniteapi})
+    response_data = response.json()
+    return response_data.get("data"), response_data.get("status")
+
+
+# Helper function to make a request to the Fortnite API
+def fortnite_api_request_by_username(username):
     request_url = f"https://fortnite-api.com/v2/stats/br/v2?name={username}"
     response = requests.get(request_url, params={"displayName": username}, headers={"Authorization": fortniteapi})
     response_data = response.json()
     return response_data.get("data"), response_data.get("status")
 
 
+# Helper function to get the Fortnite ID for the user
+def get_fortnite_id(username):
+    request_url = f"https://fortnite-api.com/v2/stats/br/v2?name={username}"
+    response = requests.get(request_url, params={"displayName": username}, headers={"Authorization": fortniteapi})
+    response_data = response.json()
+    print(response_data)
+    return response_data.get("data").get("account").get("id"), response_data.get("status")
+
+
 # Helper function to get the Fortnite username for the user
-def get_fortnite_username(ctx, username):
+def get_fortnite_record(ctx, username):
     if not username:
         author_id = str(ctx.author.id)
         user_data = get_from_record(str(ctx.guild.id), "Users", author_id)
@@ -43,8 +60,13 @@ class Fortnite(commands.Cog):
 
         await ctx.defer()
 
+        if not username:
+            flag = True
+        else:
+            flag = False
+
         # Get the Fortnite username for the player
-        username = get_fortnite_username(ctx, username)
+        username = get_fortnite_record(ctx, username)
         # Check if the Fortnite username is available
         if not username:
             await ctx.respond(
@@ -53,7 +75,10 @@ class Fortnite(commands.Cog):
             return
 
         # Make a request to the Fortnite API for the stats data
-        stats_data, status = fortnite_api_request(username)
+        if flag:
+            stats_data, status = fortnite_api_request_by_id(username)
+        else:
+            stats_data, status = fortnite_api_request_by_username(username)
 
         # Handle different status codes
         if status == 403:
@@ -69,6 +94,7 @@ class Fortnite(commands.Cog):
             await ctx.respond(f"❓ Возникла ошибка **{status}**...")
             return
         try:
+            print(stats_data)
             # Create and send the stats embed
             embed = discord.Embed(title=f'Статистика игрока {stats_data["account"]["name"]}',
                                   color=int(server_data.get("accent_color"), 16))
@@ -131,14 +157,15 @@ class Fortnite(commands.Cog):
         await ctx.defer()
         author_id = str(ctx.author.id)
 
-        stats_data, status = fortnite_api_request(username)
-        if status != 200 or not stats_data:
+        user_id, status = get_fortnite_id(username)
+        if status != 200 or not user_id:
             await ctx.respond(f"При добавлении возникла ошибка **{status}**.\nВозможно, вы неверно указали никнейм.")
             return
 
-        update_record(str(ctx.guild.id), "Users", author_id, {"fortnite": username})
+        update_record(str(ctx.guild.id), "Users", author_id, {"fortnite": user_id})
         embed = discord.Embed(
-            description=f"Аккаунт {username} был успешно привязан к вашей учётной записи!\nЕсли вы измените никнейм в игре, не забудьте его перепривязать здесь.",
+            description=f"Аккаунт **{username}** был успешно привязан к вашей учётной записи!\n"
+                        f"Если вы измените никнейм, здесь его менять не будет нужно.",
             color=int(server_data.get("accent_color"), 16))
         await ctx.respond(embed=embed)
 

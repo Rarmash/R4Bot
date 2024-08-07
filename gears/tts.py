@@ -37,10 +37,14 @@ class Tts(commands.Cog):
                         # If the bot is already connected to a voice channel, disconnect and reconnect
                         await ctx.guild.voice_client.disconnect()
                         ch = await vc.connect()
-                    # Remove any mentions from the message content to avoid reading them out in TTS
+
+                    # Remove mentions, emojis, and channels from the message content
                     content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", ctx.content)
+                    content_without_emojis = re.sub(r"<a?:\w+:\d+>", "", content_without_mentions)
+                    content_without_channels = re.sub(r"<#\d+>", "канал", content_without_emojis)
+
                     # Create the TTS speech with the user's display name and the content without mentions
-                    speech = f"{user.display_name} пишет: {content_without_mentions}"
+                    speech = f"{user.display_name} пишет: {content_without_channels}"
                     tts = gTTS(speech, lang="ru")
                     tts.save(temp_file)
 
