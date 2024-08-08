@@ -28,7 +28,6 @@ def get_fortnite_id(username):
     request_url = f"https://fortnite-api.com/v2/stats/br/v2?name={username}"
     response = requests.get(request_url, params={"displayName": username}, headers={"Authorization": fortniteapi})
     response_data = response.json()
-    print(response_data)
     return response_data.get("data").get("account").get("id"), response_data.get("status")
 
 
@@ -41,6 +40,14 @@ def get_fortnite_record(ctx, username):
             username = user_data.get("fortnite")
 
     return username
+
+
+# Helper function to get the Fortnite username for the user
+def get_fortnite_username_to_profile(accountId):
+    request_url = f"https://fortnite-api.com/v2/stats/br/v2/{accountId}"
+    response = requests.get(request_url, headers={"Authorization": fortniteapi})
+    response_data = response.json()
+    return response_data.get("data").get("account").get("name")
 
 
 class Fortnite(commands.Cog):

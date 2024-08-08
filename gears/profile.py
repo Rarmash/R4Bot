@@ -7,6 +7,8 @@ from math import ceil
 import discord
 from discord.ext import commands
 
+from gears.fortnite import get_fortnite_username_to_profile
+from gears.xbox import get_xbox_gamertag_to_profile
 from modules.firebase import get_from_record
 from options import version, servers_data, applicationID
 
@@ -48,6 +50,8 @@ class Profile(commands.Cog):
         if user is None:
             user = ctx.author
 
+        await ctx.defer()
+
         # Get the status emoji based on the user's status
         status = get_status_emoji(user.status)
 
@@ -67,10 +71,12 @@ class Profile(commands.Cog):
                 embed.add_field(name="Сообщений", value=user_data['messages'])
                 embed.add_field(name="Всего тайм-аутов", value=user_data['timeouts'])
                 if "xbox" in user_data:
+                    gamertag = get_xbox_gamertag_to_profile(user_data['xbox'])
                     embed.add_field(name="Профиль Xbox",
-                                    value=f"[{user_data['xbox']}](https://www.xbox.com/ru-RU/play/user/{str(user_data['xbox']).replace(' ', '%20')})")
+                                    value=f"[{gamertag}](https://www.xbox.com/play/user/{str(gamertag).replace(' ', '%20')})")
                 if "fortnite" in user_data:
-                    embed.add_field(name="Профиль Fortnite", value=user_data['fortnite'])
+                    nickname = get_fortnite_username_to_profile(user_data['fortnite'])
+                    embed.add_field(name="Профиль Fortnite", value=nickname)
                 if "steam" in user_data:
                     embed.add_field(name="Профиль Steam", value=f"[Тык](https://steamcommunity.com/profiles/{user_data['steam']})")
             if discord.utils.get(ctx.guild.roles, id=server_data.get("insider_id")) in user.roles:

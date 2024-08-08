@@ -35,6 +35,10 @@ def get_xbox_gamertag(ctx, gamertag):
     return gamertag
 
 
+def get_xbox_gamertag_to_profile(xuid):
+    return xpa.get_account_info_xuid(xuid).Gamertag
+
+
 class Xbox(commands.Cog):
     def __init__(self, bot):
         self.Bot = bot
