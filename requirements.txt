@@ -9,3 +9,4 @@ asyncio==3.4.3
 xbox-python-api==0.2
 firebase==4.0.1
 firebase-admin==6.5.0
+aiohttp==3.10.0

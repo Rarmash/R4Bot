@@ -3,6 +3,7 @@ from datetime import datetime
 import discord
 
 from modules.firebase import create_firebase_app
+from modules.versionChecker import VersionChecker
 from options import token, debugmode, version, gearsList, firebase_id
 
 create_firebase_app(firebase_id)
@@ -22,6 +23,7 @@ bot = discord.Bot(case_insensitive=True, intents=intents)
 # Event that runs when the bot is ready and connected to Discord
 @bot.event
 async def on_ready():
+    VersionChecker(bot)
     # Print bot information and connected guilds
     print("------")
     print(f"Текущее время: {datetime.now()}")
