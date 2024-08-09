@@ -26,7 +26,7 @@ def restart_bot():
         if platform.system() == "Windows":
             os.system(f'python "{os.path.join(os.getcwd(), "main.py")}"')
         else:
-            os.system(f'python3 "{os.path.join(os.getcwd(), "main.py")}"')
+            os.execv(sys.executable, [sys.executable] + [os.path.join(os.getcwd(), "main.py")])
         print("Запущен новый процесс бота.")
     except Exception as e:
         print(f"Ошибка при запуске нового процесса: {e}")
