@@ -12,7 +12,6 @@ from options import servers_data
 
 FFMPEG_OPTIONS = {'options': '-vn'}
 
-
 class Tts(commands.Cog):
     def __init__(self, bot, servers_data):
         self.Bot = bot
@@ -30,7 +29,12 @@ class Tts(commands.Cog):
             user = ctx.author
             vc = user.voice.channel
 
+            banned_TTS_role = discord.utils.get(ctx.guild.roles, id=server_data.get("banned_TTS_role"))
+
             if ctx.flags.suppress_notifications:
+                return
+
+            if banned_TTS_role in user.roles:
                 return
 
             if ctx.channel.id == vc.id and ctx.channel.id not in server_data.get("bannedTTSChannels", []):
