@@ -22,7 +22,8 @@ def check_servers_file():
             "bannedChannels": [],
             "bannedUsers": [],
             "bannedCategories": [],
-            "bannedTTSChannels": []
+            "bannedTTSChannels": [],
+            "banned_TTS_role": 0
         }
     }
     # Create and write the servers template to servers.json

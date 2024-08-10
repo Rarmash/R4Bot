@@ -1,4 +1,5 @@
 import re
+from asyncio import Queue
 from pathlib import Path
 
 import discord
@@ -16,43 +17,93 @@ class Tts(commands.Cog):
     def __init__(self, bot, servers_data):
         self.Bot = bot
         self.servers_data = servers_data
+        self.message_queue = Queue()
+        self.is_playing = False
+        self.last_user_message = {}  # To track the last message from each user
 
     @commands.Cog.listener()
     async def on_message(self, ctx):
         try:
-            # Try to get server_data based on the guild id from servers_data
             server_data = self.servers_data.get(str(ctx.guild.id))
             if not server_data:
                 return
-            user = ctx.author
-            try:
-                vc = user.voice.channel  # Get the voice channel of the user
-                if ctx.channel.id == vc.id and ctx.channel.id not in server_data.get("bannedTTSChannels", []):
-                    # If the channel ID of the message matches the voice channel ID of the user
-                    # and the channel ID is not in the bannedTTSChannels list, proceed with TTS
-                    temp_file = "speech.mp3"
-                    try:
-                        ch = await vc.connect()
-                    except discord.errors.ClientException:
-                        # If the bot is already connected to a voice channel, disconnect and reconnect
-                        await ctx.guild.voice_client.disconnect()
-                        ch = await vc.connect()
-                    # Remove any mentions from the message content to avoid reading them out in TTS
-                    content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", ctx.content)
-                    # Create the TTS speech with the user's display name and the content without mentions
-                    speech = f"{user.display_name} пишет: {content_without_mentions}"
-                    tts = gTTS(speech, lang="ru")
-                    tts.save(temp_file)
 
-                    audio = AudioSegment.from_mp3(temp_file)
-                    # Speed up the audio by 30%
-                    new_file = speedup(audio, 1.3, 130)
-                    new_file.export(temp_file, format="mp3")
-                    ch.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=Path(".") / temp_file, **FFMPEG_OPTIONS))
-            except:
-                pass
-        except:
-            pass
+            user = ctx.author
+            vc = user.voice.channel
+
+            banned_TTS_role = discord.utils.get(ctx.guild.roles, id=server_data.get("banned_TTS_role"))
+
+            if ctx.flags.suppress_notifications:
+                return
+
+            if banned_TTS_role in user.roles:
+                return
+
+            if ctx.channel.id == vc.id and ctx.channel.id not in server_data.get("bannedTTSChannels", []):
+                content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", ctx.content)
+                content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_mentions)
+                content_without_channels = re.sub(r"<#\d+>", "канал", content_without_emojis)
+
+                # Determine if the same user sent the previous message
+                current_time = discord.utils.utcnow()
+                last_message_info = self.last_user_message.get(user.id, {'time': None})
+
+                if last_message_info['time'] and (current_time - last_message_info['time']).total_seconds() < 10:
+                    # If the same user sent the message within 10 seconds, do not include their name
+                    speech = content_without_channels
+                else:
+                    # Otherwise, include the user name
+                    speech = f"{user.display_name} пишет: {content_without_channels}"
+
+                self.last_user_message[user.id] = {'time': current_time}
+                await self.message_queue.put((vc, speech))
+
+                if not self.is_playing:
+                    await self.process_queue()
+        except Exception as e:
+            print(f"Error in on_message: {e}")
+
+    async def process_queue(self):
+        self.is_playing = True
+        vc = None  # Инициализация переменной vc
+
+        while not self.message_queue.empty():
+            temp_file = Path("speech.mp3")
+
+            try:
+                vc, speech = await self.message_queue.get()
+
+                tts = gTTS(speech, lang="ru")
+                tts.save(temp_file)
+
+                audio = AudioSegment.from_mp3(temp_file)
+                new_file = speedup(audio, 1.3, 130)
+                new_file.export(temp_file, format="mp3")
+
+                def after_playback(error=None):
+                    if error:
+                        print(f"Error during playback: {error}")
+                    self.Bot.loop.call_soon_threadsafe(self.Bot.loop.create_task, self.process_queue())
+
+                if not vc.guild.voice_client:
+                    await vc.connect()
+                elif vc.guild.voice_client.channel != vc:
+                    await vc.guild.voice_client.move_to(vc)
+
+                vc.guild.voice_client.play(
+                    discord.FFmpegPCMAudio(executable="ffmpeg", source=temp_file, **FFMPEG_OPTIONS),
+                    after=after_playback
+                )
+
+                return  # Exit the current loop iteration; next will be triggered by `after_playback`
+
+            except Exception as e:
+                print(f"Error during playback: {e}")
+
+        self.is_playing = False
+
+        if vc and vc.guild and vc.guild.voice_client and vc.guild.voice_client.is_connected():
+            await vc.guild.voice_client.disconnect()
 
 
 def setup(bot):

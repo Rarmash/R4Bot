@@ -1,8 +1,8 @@
 import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
-from xpa import XPA
 from xpa import ErrorHandler as Xbox_err
+from xpa import XPA
 
 from modules.firebase import get_from_record, update_record, search_record_id
 from options import xboxapi
@@ -10,24 +10,33 @@ from options import xboxapi
 xpa = XPA(xboxapi)
 
 
+# Helper function to get the amount of games played by the user (max 1000)
 def get_games_amount(xuid):
     games_list = xpa.get_user_achievements(xuid)
 
     title_count = len(games_list)
+    if title_count == 1000:
+        title_count = "1000+"
+
     recentgame = games_list[0]["name"]
     curscoreonrecgame = games_list[0]["achievement"]["currentGamerscore"]
     totalscoreonrecgame = games_list[0]["achievement"]["totalGamerscore"]
     return title_count, recentgame, curscoreonrecgame, totalscoreonrecgame
 
 
+# Helper function to get the Xbox gamertag of the user
 def get_xbox_gamertag(ctx, gamertag):
     if not gamertag:
         author_id = str(ctx.author.id)
         user_data = get_from_record(str(ctx.guild.id), "Users", author_id)
         if user_data:
-            gamertag = user_data.get("xbox")
+            gamertag = xpa.get_account_info_xuid(user_data.get("xbox")).Gamertag
 
     return gamertag
+
+
+def get_xbox_gamertag_to_profile(xuid):
+    return xpa.get_account_info_xuid(xuid).Gamertag
 
 
 class Xbox(commands.Cog):
@@ -60,7 +69,8 @@ class Xbox(commands.Cog):
             embed.add_field(name="Фолловеров", value=gamer_info.followerCount)
             embed.add_field(name="Друзей", value=gamer_info.followingCount)
             try:
-                title_count, recent_game, currentScoreOnRecentGame, totalScoreOnRecentGame = get_games_amount(gamer_info.xuid)
+                title_count, recent_game, currentScoreOnRecentGame, totalScoreOnRecentGame = get_games_amount(
+                    gamer_info.xuid)
                 embed.add_field(name="Сыграно игр", value=str(title_count))
                 embed.add_field(name="Недавно играл в",
                                 value=f"{recent_game} (🅖 {currentScoreOnRecentGame}/{totalScoreOnRecentGame})")
@@ -69,7 +79,8 @@ class Xbox(commands.Cog):
             embed.add_field(name="Ссылка на профиль",
                             value=f"[Тык](https://www.xbox.com/ru-RU/play/user/{str(gamer_info.gamertag).replace(' ', '%20')})")
             try:
-                embed.add_field(name="Владелец профиля", value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'xbox', gamertag)}>")
+                embed.add_field(name="Владелец профиля",
+                                value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'xbox', gamertag)}>")
             except IndexError:
                 pass
             if gamer_info.isXbox360Gamerpic:  # TODO: rewrite, cuz this method is deprecated
@@ -91,8 +102,9 @@ class Xbox(commands.Cog):
         author = str(ctx.author.id)
         try:
             user_info = xpa.get_account_info_gamertag(gamertag)
-            update_record(str(ctx.guild.id), "Users", str(author), {"xbox": gamertag})
-            embed = discord.Embed(description=f"Аккаунт {gamertag} был успешно привязан к вашей учётной записи!",
+            update_record(str(ctx.guild.id), "Users", str(author), {"xbox": str(user_info.xuid)})
+            embed = discord.Embed(description=f"Аккаунт **{gamertag}** был успешно привязан к вашей учётной записи!\n"
+                                              f"Если вы измените Gamertag, здесь его менять не будет нужно.",
                                   color=int(user_info.preferredColor["primaryColor"], 16))
             embed.set_thumbnail(url=user_info.displayPicRaw)
             await ctx.respond(embed=embed)

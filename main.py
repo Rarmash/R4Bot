@@ -1,6 +1,9 @@
+from datetime import datetime
+
 import discord
 
 from modules.firebase import create_firebase_app
+from modules.versionChecker import VersionChecker
 from options import token, debugmode, version, gearsList, firebase_id
 
 create_firebase_app(firebase_id)
@@ -13,6 +16,7 @@ intents.messages = True
 
 # Create the Discord bot instance with specified intents
 bot = discord.Bot(case_insensitive=True, intents=intents)
+VersionChecker(bot)
 
 
 # Gears are always cool
@@ -22,6 +26,7 @@ bot = discord.Bot(case_insensitive=True, intents=intents)
 async def on_ready():
     # Print bot information and connected guilds
     print("------")
+    print(f"Текущее время: {datetime.now()}")
     print(f"{bot.user.name} запущен!")
     print(f"Версия: {version}")
     print(f"ID бота: {str(bot.user.id)}")
