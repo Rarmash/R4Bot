@@ -18,6 +18,7 @@ class Tts(commands.Cog):
         self.servers_data = servers_data
         self.message_queue = Queue()
         self.is_playing = False
+        self.last_user_message = {}  # To track the last message from each user
 
     @commands.Cog.listener()
     async def on_message(self, ctx):
@@ -42,7 +43,18 @@ class Tts(commands.Cog):
                 content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_mentions)
                 content_without_channels = re.sub(r"<#\d+>", "канал", content_without_emojis)
 
-                speech = f"{user.display_name} пишет: {content_without_channels}"
+                # Determine if the same user sent the previous message
+                current_time = discord.utils.utcnow()
+                last_message_info = self.last_user_message.get(user.id, {'time': None})
+
+                if last_message_info['time'] and (current_time - last_message_info['time']).total_seconds() < 10:
+                    # If the same user sent the message within 10 seconds, do not include their name
+                    speech = content_without_channels
+                else:
+                    # Otherwise, include the user name
+                    speech = f"{user.display_name} пишет: {content_without_channels}"
+
+                self.last_user_message[user.id] = {'time': current_time}
                 await self.message_queue.put((vc, speech))
 
                 if not self.is_playing:
@@ -91,7 +103,6 @@ class Tts(commands.Cog):
 
         if vc and vc.guild and vc.guild.voice_client and vc.guild.voice_client.is_connected():
             await vc.guild.voice_client.disconnect()
-
 
 def setup(bot):
     bot.add_cog(Tts(bot, servers_data))
