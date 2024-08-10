@@ -12,6 +12,7 @@ from options import servers_data
 
 FFMPEG_OPTIONS = {'options': '-vn'}
 
+
 class Tts(commands.Cog):
     def __init__(self, bot, servers_data):
         self.Bot = bot
@@ -103,6 +104,7 @@ class Tts(commands.Cog):
 
         if vc and vc.guild and vc.guild.voice_client and vc.guild.voice_client.is_connected():
             await vc.guild.voice_client.disconnect()
+
 
 def setup(bot):
     bot.add_cog(Tts(bot, servers_data))
