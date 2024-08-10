@@ -16,6 +16,7 @@ intents.messages = True
 
 # Create the Discord bot instance with specified intents
 bot = discord.Bot(case_insensitive=True, intents=intents)
+VersionChecker(bot)
 
 
 # Gears are always cool
@@ -23,7 +24,6 @@ bot = discord.Bot(case_insensitive=True, intents=intents)
 # Event that runs when the bot is ready and connected to Discord
 @bot.event
 async def on_ready():
-    VersionChecker(bot)
     # Print bot information and connected guilds
     print("------")
     print(f"Текущее время: {datetime.now()}")
