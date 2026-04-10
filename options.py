@@ -1,33 +1,28 @@
+import json
 from os import environ
 
 from dotenv import load_dotenv
 
-from modules.generateConfig import *
+from modules.generateConfig import check_servers_file
 
-# Load environment variables from .env file
 load_dotenv()
 
 version = "1.4"
 
-# Get environment variables
-token = environ.get('TOKEN')
-applicationID = environ.get('APPLICATIONID')
-fortniteapi = environ.get('FORTNITEAPI')
-xboxapi = environ.get('XBOXAPI')
-steamapi = environ.get('STEAMAPI')
-with open("firebaseConfig.json", "r", encoding="utf8") as f:
-    firebase_id = json.load(f).get("project_id")
-debugmode = environ.get('DEBUGMODE')
+token = environ.get("TOKEN")
+applicationID = environ.get("APPLICATIONID")
+fortniteapi = environ.get("FORTNITEAPI")
+xboxapi = environ.get("XBOXAPI")
+steamapi = environ.get("STEAMAPI")
+debugmode = environ.get("DEBUGMODE")
+
+with open("firebaseConfig.json", "r", encoding="utf8") as file:
+    firebase_id = json.load(file).get("project_id")
 
 try:
-    # Try to open and load the existing servers.json file
-    with open('servers.json') as f:
-        servers_data = json.load(f)
-    if 'gears' in servers_data:
-        gearsList = servers_data['gears']
-        del servers_data['gears']
-    else:
-        gearsList = []
+    with open("servers.json", "r", encoding="utf8") as file:
+        servers_data = json.load(file)
+
+    cogs_list = servers_data.pop("cogs", [])
 except FileNotFoundError:
-    # If servers.json does not exist, call the function to create it
     check_servers_file()

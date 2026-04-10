@@ -40,7 +40,7 @@ docker compose up --build -d
 
 ```json
 {
-    "gears": [
+    "cogs": [
         "events"
     ],
     "server_id": {
@@ -66,7 +66,7 @@ docker compose up --build -d
 ```
 
 Описание полей:
-- `gears` — список подключаемых модулей
+- `cogs` — список подключаемых модулей
 - `accent_color` — акцентный цвет сообщений бота в формате HEX
 - `log_channel` — канал для логирования удалённых и изменённых сообщений
 - `admin_channel` — административный канал

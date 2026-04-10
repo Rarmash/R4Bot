@@ -10,4 +10,3 @@ services:
       - ./.env:/app/.env:ro
       - ./firebaseConfig.json:/app/firebaseConfig.json:ro
       - ./servers.json:/app/servers.json
-      - ./servers.json.save:/app/servers.json.save

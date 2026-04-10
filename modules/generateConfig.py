@@ -2,10 +2,9 @@ import json
 from time import sleep
 
 
-# Function to check and create the servers file template if it doesn't exist
 def check_servers_file():
     servers_template = {
-        "gears": ["events"],
+        "cogs": ["events"],
         "server_id": {
             "accent_color": "0xFFFFFF",
             "log_channel": 0,
@@ -23,12 +22,13 @@ def check_servers_file():
             "bannedUsers": [],
             "bannedCategories": [],
             "bannedTTSChannels": [],
-            "banned_TTS_role": 0
-        }
+            "banned_TTS_role": 0,
+        },
     }
-    # Create and write the servers template to servers.json
-    with open('servers.json', 'w') as f:
-        json.dump(servers_template, f, indent=4)
-    print('Для продолжения, заполните файл servers.json.')  # Print instructions for the user
-    sleep(5)  # Sleep for 5 seconds to give the user time to read the instructions
-    exit()  # Exit the program
+
+    with open("servers.json", "w", encoding="utf8") as file:
+        json.dump(servers_template, file, indent=4, ensure_ascii=False)
+
+    print("Для продолжения заполните файл servers.json.")
+    sleep(5)
+    exit()

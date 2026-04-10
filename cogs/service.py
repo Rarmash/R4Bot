@@ -108,42 +108,42 @@ class Service(commands.Cog):
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     @service.command(description="Выгрузить модуль")
-    @discord.option("gear", description="Название модуля")
-    async def unload(self, ctx, gear: str):
+    @discord.option("cog", description="Название модуля")
+    async def unload(self, ctx, cog: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
 
         if ctx.author.id == server_data.get("admin_id"):
-            self.bot.unload_extension(f"gears.{gear}")
-            await ctx.respond(f"**gears.{gear}** выгружается...")
+            self.bot.unload_extension(f"cogs.{cog}")
+            await ctx.respond(f"**cogs.{cog}** выгружается...")
         else:
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     @service.command(description="Загрузить модуль")
-    @discord.option("gear", description="Название модуля")
-    async def load(self, ctx, gear: str):
+    @discord.option("cog", description="Название модуля")
+    async def load(self, ctx, cog: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
 
         if ctx.author.id == server_data.get("admin_id"):
-            self.bot.load_extension(f"gears.{gear}")
-            await ctx.respond(f"**gears.{gear}** запускается...")
+            self.bot.load_extension(f"cogs.{cog}")
+            await ctx.respond(f"**cogs.{cog}** запускается...")
         else:
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
     @service.command(description="Перезагрузить модуль")
-    @discord.option("gear", description="Название модуля")
-    async def reload(self, ctx, gear: str):
+    @discord.option("cog", description="Название модуля")
+    async def reload(self, ctx, cog: str):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
             return
 
         if ctx.author.id == server_data.get("admin_id"):
-            self.bot.unload_extension(f"gears.{gear}")
-            self.bot.load_extension(f"gears.{gear}")
-            await ctx.respond(f"**gears.{gear}** перезапускается...")
+            self.bot.unload_extension(f"cogs.{cog}")
+            self.bot.load_extension(f"cogs.{cog}")
+            await ctx.respond(f"**cogs.{cog}** перезапускается...")
         else:
             await ctx.respond("Недостаточно прав для выполнения данной команды.")
 
