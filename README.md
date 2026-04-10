@@ -1,30 +1,28 @@
 # R4Bot ![Version](https://img.shields.io/github/v/release/Rarmash/R4Bot?label=Latest)
 
-Discord-бот для модерации серверов и дополнительных сервисных задач. Бот использует slash-команды, работает с несколькими серверами через `servers.json`, поддерживает Firebase и включает игровые и служебные модули.
+R4Bot — Discord-бот для модерации серверов и дополнительных сервисных задач. Бот использует slash-команды, работает с несколькими серверами через `servers.json`, поддерживает Firebase и включает игровые и служебные модули.
 
 ## Установка
 1. Клонируйте репозиторий:
    ```bash
    git clone https://github.com/Rarmash/R4Bot.git
-   ```
-2. Перейдите в директорию проекта:
-   ```bash
    cd R4Bot
    ```
-3. Установите зависимости:
+2. Установите зависимости:
    ```bash
    pip install -r requirements.txt
    ```
-4. Установите [FFmpeg](https://ffmpeg.org/). Он нужен для TTS и голосового воспроизведения.
-5. Настройте бота через файлы `servers.json` и `.env` (шаблон — [.env_template](https://github.com/Rarmash/R4Bot/blob/master/.env_template)).
-6. Сгенерируйте ключ доступа к своему приложению [Firebase](https://console.firebase.google.com) (`Project Settings` -> `Service accounts` -> `Firebase Admin SDK` -> `Python`) и поместите полученный файл в корень проекта как `firebaseConfig.json`.
-7. Запустите бота:
+3. Установите [FFmpeg](https://ffmpeg.org/). Он нужен для TTS и голосового воспроизведения.
+4. Настройте бота через `servers.json` и `.env`:
+   - шаблон переменных: [.env_template](https://github.com/Rarmash/R4Bot/blob/master/.env_template)
+   - `firebaseConfig.json` нужно получить в [Firebase Console](https://console.firebase.google.com) через `Project Settings` -> `Service accounts` -> `Firebase Admin SDK` -> `Python`
+5. Запустите бота:
    ```bash
    python main.py
    ```
 
 ## Docker
-Для запуска через Docker:
+Базовый запуск:
 
 ```bash
 docker compose up --build -d
@@ -34,6 +32,25 @@ docker compose up --build -d
 - `.env`
 - `firebaseConfig.json`
 - `servers.json`
+
+### Docker через XRay
+Если бот запускается на сервере, где Discord недоступен напрямую, можно использовать локальный override для `docker compose`.
+
+1. Создайте локальный override:
+   ```bash
+   cp docker-compose.override.example.yml docker-compose.override.yml
+   ```
+2. Создайте локальный конфиг XRay:
+   ```bash
+   cp xray-client.json.example xray-client.json
+   ```
+3. Заполните `xray-client.json` своими данными.
+4. Запустите контейнеры:
+   ```bash
+   docker compose up --build -d
+   ```
+
+Файлы `docker-compose.override.yml` и `xray-client.json` предназначены для локального использования на сервере и не должны коммититься в репозиторий.
 
 ## О `servers.json`
 Бот поддерживает работу на нескольких серверах. Для этого нужно добавить отдельный блок настроек для каждого сервера.

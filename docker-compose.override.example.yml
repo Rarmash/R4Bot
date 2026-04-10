@@ -1,0 +1,18 @@
+services:
+  xray-client:
+    image: teddysun/xray
+    container_name: r4bot-xray-client
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./xray-client.json:/etc/xray/config.json:ro
+
+  r4bot:
+    network_mode: "service:xray-client"
+    depends_on:
+      - xray-client

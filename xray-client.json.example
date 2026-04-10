@@ -1,0 +1,81 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "dns": {
+    "servers": [
+      "1.1.1.1",
+      "8.8.8.8",
+      "localhost"
+    ]
+  },
+  "inbounds": [
+    {
+      "tag": "tun-in",
+      "protocol": "tun",
+      "settings": {
+        "mtu": 1500,
+        "stack": "system",
+        "autoRoute": true,
+        "strictRoute": true
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "proxy-nl",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "host.docker.internal",
+            "port": 2040,
+            "users": [
+              {
+                "id": "REPLACE_WITH_UUID",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "REPLACE_WITH_SERVER_NAME",
+          "publicKey": "REPLACE_WITH_PUBLIC_KEY",
+          "shortId": "REPLACE_WITH_SHORT_ID"
+        }
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": [
+          "tun-in"
+        ],
+        "outboundTag": "proxy-nl"
+      }
+    ]
+  }
+}
