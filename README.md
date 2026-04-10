@@ -1,65 +1,96 @@
-# R4Bot ![Version](https://img.shields.io/badge/Latest-1.3/master-blue.svg)
-Discord-бот, созданный для облегчения модерации серверов, и не только. Используются слэш-команды.
+# R4Bot ![Version](https://img.shields.io/github/v/release/Rarmash/R4Bot?label=Latest)
 
-## 🛠️ Установка
+Discord-бот для модерации серверов и дополнительных сервисных задач. Бот использует slash-команды, работает с несколькими серверами через `servers.json`, поддерживает Firebase и включает игровые и служебные модули.
+
+## Установка
 1. Клонируйте репозиторий:
-    ```BASH
-    git clone https://github.com/Rarmash/R4bot.git
-    ```
-2. Смените директорию:
-    ```BASH
-    cd R4bot
-    ```
+   ```bash
+   git clone https://github.com/Rarmash/R4Bot.git
+   ```
+2. Перейдите в директорию проекта:
+   ```bash
+   cd R4Bot
+   ```
 3. Установите зависимости:
-    ```BASH
-    pip install -r requirements.txt
-    ```
-4. Загрузите и установите [FFMPEG](https://ffmpeg.org/) (как вариант - в корень проекта).
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Установите [FFmpeg](https://ffmpeg.org/). Он нужен для TTS и голосового воспроизведения.
+5. Настройте бота через файлы `servers.json` и `.env` (шаблон — [.env_template](https://github.com/Rarmash/R4Bot/blob/master/.env_template)).
+6. Сгенерируйте ключ доступа к своему приложению [Firebase](https://console.firebase.google.com) (`Project Settings` -> `Service accounts` -> `Firebase Admin SDK` -> `Python`) и поместите полученный файл в корень проекта как `firebaseConfig.json`.
+7. Запустите бота:
+   ```bash
+   python main.py
+   ```
 
-5. Запустите файл Python:
-    ```BASH
-    python main.py
-    ```
+## Docker
+Для запуска через Docker:
 
-6. Настройте бота через файлы servers.json и .env (шаблон - [.env_template](https://github.com/Rarmash/R4Bot/blob/master/.env_template)).
+```bash
+docker compose up --build -d
+```
 
-7. Сгенерируйте ключ доступа к своему приложению [Firebase](https://console.firebase.google.com) (в панели управления: `Project Settings` -> `Service accounts` -> `Firebase Admin SDK` -> `Python`) и поместите полученный файл в корень проекта.
+Контейнер использует:
+- `.env`
+- `firebaseConfig.json`
+- `servers.json`
 
-## 🛠️ О servers.json:
-Бот поддерживает нахождение на нескольких серверах. Просто продублируйте блок с настройками сервера и заполните его.
-```JSON
+## О `servers.json`
+Бот поддерживает работу на нескольких серверах. Для этого нужно добавить отдельный блок настроек для каждого сервера.
+
+```json
 {
-    "gears": [                            // список подключаемых модулей
+    "cogs": [
         "events"
     ],
-    "server_id": {                        // ID сервера
-        "accent_color": "0xFFFFFF",       // акцентный цвет для сообщений бота (в виде HEX-кода)
-        "log_channel": 0,                 // ID канала для логирования удалённых/отредактированных сообщений
-        "admin_channel": 0,               // ID канала Администрации
-        "ticket_category": 0,             // ID категории для тикетов
-        "suggestions_channel": 0,         // ID канала для предложений
-        "media_channel": 0,               // ID канала для медиаконтента
-        "media_pins": 1,                  // количество реакций, необходимых для закрепления сообщения
-        "admin_id": 0,                    // ID администратора бота
-        "mod_role_id": 0,                 // ID роли модератора
-        "insider_id": 0,                  // ID роли инсайдера
-        "admin_role_id": 0,               // ID роли Администрации
-        "trash_channels": [],             // ID каналов, в которых не будет подсчитываться количество отправленных сообщений
-        "bannedChannels": [],             // ID каналов, в которых не будут учитываться сообщения для логирования
-        "bannedUsers": [],                // ID пользователей, чьи сообщения не будут учитываться для логирования
-        "bannedCategories": [],           // ID категорий, в каналах которых не будут учитываться сообщения для логирования
-        "bannedTTSChannels": []           // ID каналов, в которых не будет использоваться Text-to-Speech
-        "banned_TTS_role": 0              // ID роли, обладатели которой не смогут использовать Text-to-Speech
+    "server_id": {
+        "accent_color": "0xFFFFFF",
+        "log_channel": 0,
+        "admin_channel": 0,
+        "ticket_category": 0,
+        "suggestions_channel": 0,
+        "media_channel": 0,
+        "media_pins": 1,
+        "admin_id": 0,
+        "mod_role_id": 0,
+        "insider_id": 0,
+        "admin_role_id": 0,
+        "trash_channels": [],
+        "bannedChannels": [],
+        "bannedUsers": [],
+        "bannedCategories": [],
+        "bannedTTSChannels": [],
+        "banned_TTS_role": 0
     }
 }
 ```
 
-## 🛠️ О .env:
-```ENV
-TOKEN=           // Токен бота Discord
-APPLICATIONID=   // Application ID приложения бота с Discord Developer Portal
-FORTNITEAPI=     // Ключ API для получения данных с https://fortnite-api.com/
-XBOXAPI=         // Ключ API для получения данных с https://xbl.io/
-STEAMAPI=        // Ключ API для получения данных с https://www.steamwebapi.com/
-DEBUGMODE=OFF    // Значение DEBUG-режима
+Описание полей:
+- `cogs` — список подключаемых модулей
+- `accent_color` — акцентный цвет сообщений бота в формате HEX
+- `log_channel` — канал для логирования удалённых и изменённых сообщений
+- `admin_channel` — административный канал
+- `ticket_category` — категория для тикетов
+- `suggestions_channel` — канал для предложений
+- `media_channel` — канал для медиа-контента
+- `media_pins` — количество реакций, нужное для закрепления сообщения
+- `admin_id` — Discord ID администратора бота
+- `mod_role_id` — ID роли модератора
+- `insider_id` — ID роли инсайдера
+- `admin_role_id` — ID роли администрации
+- `trash_channels` — каналы, где не считается статистика сообщений
+- `bannedChannels` — каналы, исключённые из логирования
+- `bannedUsers` — пользователи, исключённые из логирования
+- `bannedCategories` — категории, исключённые из логирования
+- `bannedTTSChannels` — каналы, где отключён TTS
+- `banned_TTS_role` — роль, которой запрещено использовать TTS
+
+## О `.env`
+```env
+TOKEN=           # Токен бота Discord
+APPLICATIONID=   # Application ID приложения из Discord Developer Portal
+FORTNITEAPI=     # Ключ API для Fortnite
+XBOXAPI=         # Ключ API для Xbox
+STEAMAPI=        # Ключ официального Steam Web API
+DEBUGMODE=OFF    # Значение debug-режима
 ```

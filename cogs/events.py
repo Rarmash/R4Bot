@@ -1,3 +1,5 @@
+import asyncio
+
 from discord.ext import commands
 
 
@@ -14,15 +16,22 @@ class Events(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        # Check if the member's voice state has changed and if they were in a voice channel before the update
         voice_state = member.guild.voice_client
         if voice_state is None:
             return
 
-            # Check if the voice channel is empty (only the bot remains in the channel)
-        if len(voice_state.channel.members) == 1:
-            # If the voice channel is empty, disconnect the bot from the voice channel
-            await voice_state.disconnect()
+        if member.bot:
+            return
+
+        await asyncio.sleep(1)
+
+        voice_state = member.guild.voice_client
+        if voice_state is None or not voice_state.channel:
+            return
+
+        human_members = [channel_member for channel_member in voice_state.channel.members if not channel_member.bot]
+        if not human_members:
+            await voice_state.disconnect(force=True)
 
 
 def setup(bot):

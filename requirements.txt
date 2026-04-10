@@ -1,12 +1,10 @@
-py-cord[voice]==2.6.0
-# py-cord @ git+https://github.com/pycord/pycord-v3 # Preparing for Pycord v3
+# Git dependency is used because stable py-cord voice was unreliable on Python 3.13.
+py-cord[voice] @ git+https://github.com/Pycord-Development/pycord.git
 python-dotenv==1.0.1
 dnspython==2.6.1
-requests==2.32.0
+requests>=2.33.1,<3
 gtts==2.5.1
-pydub==0.25.1
-asyncio==3.4.3
-xbox-python-api==0.2
+xbox-python-api==0.2.2
 firebase==4.0.1
 firebase-admin==6.5.0
-aiohttp==3.10.0
+aiohttp==3.13.5
