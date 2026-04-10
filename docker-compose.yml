@@ -1,0 +1,13 @@
+services:
+  r4bot:
+    build: .
+    container_name: r4bot
+    restart: unless-stopped
+    working_dir: /app
+    env_file:
+      - ./.env
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./firebaseConfig.json:/app/firebaseConfig.json:ro
+      - ./servers.json:/app/servers.json
+      - ./servers.json.save:/app/servers.json.save

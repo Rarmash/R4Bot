@@ -1,16 +1,19 @@
+import asyncio
 import re
+import tempfile
 from asyncio import Queue
 from pathlib import Path
 
 import discord
 from discord.ext import commands
 from gtts import gTTS
-from pydub import AudioSegment
-from pydub.effects import speedup
 
 from options import servers_data
 
-FFMPEG_OPTIONS = {'options': '-vn'}
+FFMPEG_OPTIONS = {
+    "before_options": "-nostdin",
+    "options": '-vn -filter:a "atempo=1.3"',
+}
 
 
 class Tts(commands.Cog):
@@ -19,91 +22,149 @@ class Tts(commands.Cog):
         self.servers_data = servers_data
         self.message_queue = Queue()
         self.is_playing = False
-        self.last_user_message = {}  # To track the last message from each user
+        self.worker_task = None
+        self.last_user_message = {}
 
     @commands.Cog.listener()
     async def on_message(self, ctx):
         try:
+            if not ctx.guild or ctx.author.bot or not ctx.content:
+                return
+
             server_data = self.servers_data.get(str(ctx.guild.id))
             if not server_data:
                 return
 
             user = ctx.author
-            vc = user.voice.channel
+            if not user.voice or not user.voice.channel:
+                return
 
-            banned_TTS_role = discord.utils.get(ctx.guild.roles, id=server_data.get("banned_TTS_role"))
+            voice_channel = user.voice.channel
+            banned_tts_role = discord.utils.get(ctx.guild.roles, id=server_data.get("banned_TTS_role"))
 
             if ctx.flags.suppress_notifications:
                 return
 
-            if banned_TTS_role in user.roles:
+            if banned_tts_role and banned_tts_role in user.roles:
                 return
 
-            if ctx.channel.id == vc.id and ctx.channel.id not in server_data.get("bannedTTSChannels", []):
-                content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", ctx.content)
-                content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_mentions)
-                content_without_channels = re.sub(r"<#\d+>", "канал", content_without_emojis)
+            if ctx.channel.id != voice_channel.id:
+                return
 
-                # Determine if the same user sent the previous message
-                current_time = discord.utils.utcnow()
-                last_message_info = self.last_user_message.get(user.id, {'time': None})
+            if ctx.channel.id in server_data.get("bannedTTSChannels", []):
+                return
 
-                if last_message_info['time'] and (current_time - last_message_info['time']).total_seconds() < 10:
-                    # If the same user sent the message within 10 seconds, do not include their name
-                    speech = content_without_channels
-                else:
-                    # Otherwise, include the user name
-                    speech = f"{user.display_name} пишет: {content_without_channels}"
+            content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", ctx.content)
+            content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_mentions)
+            content_without_channels = re.sub(r"<#\d+>", "канал", content_without_emojis).strip()
 
-                self.last_user_message[user.id] = {'time': current_time}
-                await self.message_queue.put((vc, speech))
+            if not content_without_channels:
+                return
 
-                if not self.is_playing:
-                    await self.process_queue()
+            current_time = discord.utils.utcnow()
+            last_message_info = self.last_user_message.get(user.id, {"time": None})
+
+            if last_message_info["time"] and (current_time - last_message_info["time"]).total_seconds() < 10:
+                speech = content_without_channels
+            else:
+                speech = f"{user.display_name} пишет: {content_without_channels}"
+
+            self.last_user_message[user.id] = {"time": current_time}
+            await self.message_queue.put((voice_channel, speech))
+
+            if not self.worker_task or self.worker_task.done():
+                self.worker_task = self.Bot.loop.create_task(self.process_queue())
         except Exception as e:
             print(f"Error in on_message: {e}")
 
+    async def ensure_voice_client(self, channel):
+        voice_client = channel.guild.voice_client
+
+        if voice_client and not voice_client.is_connected():
+            await voice_client.disconnect(force=True)
+            voice_client = None
+
+        if voice_client is None:
+            voice_client = await channel.connect(timeout=30.0, reconnect=True)
+        elif voice_client.channel != channel:
+            await voice_client.move_to(channel)
+
+        for _ in range(20):
+            if voice_client.is_connected():
+                return voice_client
+            await asyncio.sleep(0.25)
+
+        if hasattr(voice_client, "_connected"):
+            await asyncio.to_thread(voice_client._connected.wait, 5)
+
+        return voice_client
+
     async def process_queue(self):
+        if self.is_playing:
+            return
+
         self.is_playing = True
-        vc = None  # Инициализация переменной vc
 
-        while not self.message_queue.empty():
-            temp_file = Path("speech.mp3")
+        try:
+            while not self.message_queue.empty():
+                temp_file = None
 
-            try:
-                vc, speech = await self.message_queue.get()
+                try:
+                    last_channel, speech = await self.message_queue.get()
 
-                tts = gTTS(speech, lang="ru")
-                tts.save(temp_file)
+                    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
+                        temp_file = Path(temp_audio.name)
 
-                audio = AudioSegment.from_mp3(temp_file)
-                new_file = speedup(audio, 1.3, 130)
-                new_file.export(temp_file, format="mp3")
+                    await asyncio.to_thread(gTTS(speech, lang="ru").save, str(temp_file))
 
-                def after_playback(error=None):
-                    if error:
-                        print(f"Error during playback: {error}")
-                    self.Bot.loop.call_soon_threadsafe(self.Bot.loop.create_task, self.process_queue())
+                    playback_started = False
+                    last_error = None
 
-                if not vc.guild.voice_client:
-                    await vc.connect()
-                elif vc.guild.voice_client.channel != vc:
-                    await vc.guild.voice_client.move_to(vc)
+                    for attempt in range(3):
+                        voice_client = await self.ensure_voice_client(last_channel)
 
-                vc.guild.voice_client.play(
-                    discord.FFmpegPCMAudio(executable="ffmpeg", source=temp_file, **FFMPEG_OPTIONS),
-                    after=after_playback
-                )
+                        if not voice_client:
+                            last_error = RuntimeError("Voice client was not created.")
+                            await asyncio.sleep(1)
+                            continue
 
-                return  # Exit the current loop iteration; next will be triggered by `after_playback`
+                        if voice_client.is_playing():
+                            voice_client.stop()
 
-            except Exception as e:
-                print(f"Error during playback: {e}")
+                        await asyncio.sleep(1 + attempt * 0.5)
 
-        self.is_playing = False
+                        try:
+                            playback = voice_client.play(
+                                discord.FFmpegOpusAudio(
+                                    executable="ffmpeg",
+                                    source=str(temp_file),
+                                    **FFMPEG_OPTIONS,
+                                ),
+                                wait_finish=True,
+                            )
 
-        if vc and vc.guild and vc.guild.voice_client and vc.guild.voice_client.is_connected():
-            await vc.guild.voice_client.disconnect()
+                            if playback:
+                                error = await playback
+                                if error:
+                                    raise error
+
+                            playback_started = True
+                            break
+                        except Exception as playback_error:
+                            last_error = playback_error
+                            print(f"TTS playback attempt {attempt + 1}/3 failed: {playback_error}")
+                            await asyncio.sleep(1)
+
+                    if not playback_started and last_error:
+                        raise last_error
+                except Exception as e:
+                    print(f"Error during playback: {e}")
+                finally:
+                    if temp_file and temp_file.exists():
+                        temp_file.unlink(missing_ok=True)
+                    self.message_queue.task_done()
+        finally:
+            self.is_playing = False
 
 
 def setup(bot):
