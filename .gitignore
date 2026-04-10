@@ -6,6 +6,8 @@ bin/*
 .env
 .env_master
 .env_dev
+docker-compose.override.yml
+xray-client.json
 speech.mp3
 *.json
 .venv
