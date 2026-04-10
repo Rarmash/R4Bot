@@ -1,4 +1,4 @@
-# R4Bot ![Version](https://img.shields.io/badge/Latest-1.4/master-blue.svg)
+# R4Bot ![Version](https://img.shields.io/github/v/release/Rarmash/R4Bot?label=Latest)
 
 Discord-бот для модерации серверов и дополнительных сервисных задач. Бот использует slash-команды, работает с несколькими серверами через `servers.json`, поддерживает Firebase и включает игровые и служебные модули.
 
