@@ -1,18 +1,18 @@
 services:
-  xray-client:
-    image: teddysun/xray
-    container_name: r4bot-xray-client
+  sing-box:
+    image: ghcr.io/sagernet/sing-box:latest
+    container_name: r4bot-singbox
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
+      - NET_RAW
     devices:
       - /dev/net/tun:/dev/net/tun
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
-      - ./xray-client.json:/etc/xray/config.json:ro
+      - ./sing-box.json:/etc/sing-box/config.json:ro
+    command: -D /var/lib/sing-box -C /etc/sing-box run
 
   r4bot:
-    network_mode: "service:xray-client"
+    network_mode: "service:sing-box"
     depends_on:
-      - xray-client
+      - sing-box

@@ -33,8 +33,8 @@ docker compose up --build -d
 - `firebaseConfig.json`
 - `servers.json`
 
-### Docker через XRay
-Если бот запускается на сервере, где Discord недоступен напрямую, можно использовать локальный override для `docker compose`.
+### Docker через Sing-box
+Если бот запускается на сервере, где Discord недоступен напрямую (например, из-за блокировок), можно пустить весь трафик контейнера через VPN с помощью sing-box.
 
 1. Создайте локальный override:
    ```bash
@@ -42,15 +42,25 @@ docker compose up --build -d
    ```
 2. Создайте локальный конфиг XRay:
    ```bash
-   cp xray-client.json.example xray-client.json
+   cp sing-box.json.example sing-box.json
    ```
-3. Заполните `xray-client.json` своими данными.
+3. Заполните `sing-box.json` своими данными.
+
+   Укажите свои параметры:
+
+   - `server` — IP вашей XRay-ноды
+   - `server_port` — порт inbound (например, 2040)
+   - `uuid` — ID пользователя
+   - `flow` — обязательно xtls-rprx-vision, если используется Reality
+   - `server_name` — SNI (домен из Reality конфигурации)
+   - `public_key` — Reality public key
+   - `short_id` — Reality short ID
 4. Запустите контейнеры:
    ```bash
    docker compose up --build -d
    ```
 
-Файлы `docker-compose.override.yml` и `xray-client.json` предназначены для локального использования на сервере и не должны коммититься в репозиторий.
+Файлы `docker-compose.override.yml` и `sing-box.json` предназначены для локального использования на сервере и не должны коммититься в репозиторий. Используйте IP (`172.x.x.x` / реальный IP), а не `host.docker.internal`.
 
 ## О `servers.json`
 Бот поддерживает работу на нескольких серверах. Для этого нужно добавить отдельный блок настроек для каждого сервера.
