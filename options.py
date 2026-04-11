@@ -7,7 +7,7 @@ from modules.generateConfig import check_servers_file
 
 load_dotenv()
 
-version = "1.4.1"
+version = "1.4.2"
 
 token = environ.get("TOKEN")
 applicationID = environ.get("APPLICATIONID")

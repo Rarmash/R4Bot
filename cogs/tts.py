@@ -25,6 +25,27 @@ class Tts(commands.Cog):
         self.worker_task = None
         self.last_user_message = {}
 
+    async def disconnect_if_channel_empty(self, guild):
+        voice_client = guild.voice_client
+        if voice_client is None or voice_client.channel is None:
+            return
+
+        human_members = [member for member in voice_client.channel.members if not member.bot]
+        if not human_members:
+            await voice_client.disconnect(force=True)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if member.bot:
+            return
+
+        voice_client = member.guild.voice_client
+        if voice_client is None:
+            return
+
+        await asyncio.sleep(1)
+        await self.disconnect_if_channel_empty(member.guild)
+
     @commands.Cog.listener()
     async def on_message(self, ctx):
         try:
@@ -74,8 +95,8 @@ class Tts(commands.Cog):
 
             if not self.worker_task or self.worker_task.done():
                 self.worker_task = self.Bot.loop.create_task(self.process_queue())
-        except Exception as e:
-            print(f"Error in on_message: {e}")
+        except Exception as exc:
+            print(f"Error in on_message: {exc}")
 
     async def ensure_voice_client(self, channel):
         voice_client = channel.guild.voice_client
@@ -157,12 +178,15 @@ class Tts(commands.Cog):
 
                     if not playback_started and last_error:
                         raise last_error
-                except Exception as e:
-                    print(f"Error during playback: {e}")
+                except Exception as exc:
+                    print(f"Error during playback: {exc}")
                 finally:
                     if temp_file and temp_file.exists():
                         temp_file.unlink(missing_ok=True)
                     self.message_queue.task_done()
+
+            for guild in self.Bot.guilds:
+                await self.disconnect_if_channel_empty(guild)
         finally:
             self.is_playing = False
 
