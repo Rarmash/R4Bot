@@ -28,19 +28,10 @@ async def on_ready():
         print(f"Подключились к серверу: {guild}")
     print("------")
 
-    if debugmode == "ON":
-        status = discord.Status.dnd
-        activity = discord.Activity(
-            type=discord.ActivityType.playing,
-            name=f"debug-режиме (v{version})",
-        )
-    else:
-        status = discord.Status.online
-        activity = discord.Activity(
-            type=discord.ActivityType.listening,
-            name=f"обиды участников (v{version})",
-        )
-
+    is_debug = debugmode == "ON"
+    status = discord.Status.dnd if is_debug else discord.Status.online
+    status_text = f"v{version} debug" if is_debug else f"v{version}"
+    activity = discord.CustomActivity(name=status_text)
     await bot.change_presence(status=status, activity=activity)
 
 
