@@ -31,21 +31,45 @@ def get_servers_file():
     return servers_path if servers_path.exists() else None
 
 
+def get_timestamp(value: datetime.datetime) -> int:
+    return ceil(
+        time.mktime(
+            datetime.datetime.strptime(
+                value.strftime("%#d.%#m.%Y в %H:%M:%S"),
+                "%d.%m.%Y в %H:%M:%S",
+            ).timetuple()
+        )
+    )
+
+
 class Service(commands.Cog):
+    service = SlashCommandGroup("service", "Сервисные команды")
+
     def __init__(self, bot, servers_data):
         self.bot = bot
         self.servers_data = servers_data
 
-    service = SlashCommandGroup("service", "Сервисные команды")
+    def get_server_data(self, guild_id: int):
+        return self.servers_data.get(str(guild_id))
+
+    async def deny_if_not_admin(self, ctx, server_data) -> bool:
+        if ctx.author.id == server_data.get("admin_id"):
+            return False
+
+        await ctx.respond("Недостаточно прав для выполнения данной команды.")
+        return True
 
     @commands.slash_command(description="Посмотреть карточку сервера")
     @discord.guild_only()
     async def server(self, ctx):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
         guild = ctx.guild
+        members = guild.members
+        bot_count = len([member for member in members if member.bot])
+
         embed = discord.Embed(
             title=f"Информация о сервере {guild}",
             color=int(server_data.get("accent_color"), 16),
@@ -55,26 +79,19 @@ class Service(commands.Cog):
         embed.add_field(name="Каналов", value=str(len(guild.channels)))
         embed.add_field(name="Ролей", value=str(len(guild.roles)))
         embed.add_field(name="Бустеров", value=str(len(guild.premium_subscribers)))
-        embed.add_field(
-            name="Участников",
-            value=guild.member_count - len([member for member in ctx.guild.members if member.bot]),
-        )
-        embed.add_field(name="Ботов", value=str(len([member for member in ctx.guild.members if member.bot])))
-        embed.add_field(
-            name="Создан",
-            value=f"<t:{ceil(time.mktime(datetime.datetime.strptime(str(guild.created_at.strftime('%#d.%#m.%Y в %H:%M:%S')), '%d.%m.%Y в %H:%M:%S').timetuple()))}:f>",
-        )
+        embed.add_field(name="Участников", value=str(guild.member_count - bot_count))
+        embed.add_field(name="Ботов", value=str(bot_count))
+        embed.add_field(name="Создан", value=f"<t:{get_timestamp(guild.created_at)}:f>")
         embed.add_field(name="Владелец", value=f"<@{guild.owner.id}>")
         await ctx.respond(embed=embed)
 
     @service.command(description="Отправить .env и servers.json")
     async def secrets(self, ctx):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
-        if ctx.author.id != server_data.get("admin_id"):
-            await ctx.respond("Недостаточно прав для выполнения данной команды.")
+        if await self.deny_if_not_admin(ctx, server_data):
             return
 
         env_lines = read_env_lines()
@@ -92,60 +109,61 @@ class Service(commands.Cog):
                 await ctx.author.send(f"```env\n{secret_text}\n```", file=discord.File(servers_file))
             else:
                 await ctx.author.send(f"```env\n{secret_text}\n```")
-        elif servers_file:
-            await ctx.author.send(file=discord.File(servers_file))
+            return
+
+        await ctx.author.send(file=discord.File(servers_file))
 
     @service.command(description="Выключить бота")
     async def shutdown(self, ctx):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
-        if ctx.author.id == server_data.get("admin_id"):
-            await ctx.respond("Завершение работы... :wave:")
-            os.abort()
-        else:
-            await ctx.respond("Недостаточно прав для выполнения данной команды.")
+        if await self.deny_if_not_admin(ctx, server_data):
+            return
+
+        await ctx.respond("Завершение работы... :wave:")
+        os.abort()
 
     @service.command(description="Выгрузить модуль")
     @discord.option("cog", description="Название модуля")
     async def unload(self, ctx, cog: str):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
-        if ctx.author.id == server_data.get("admin_id"):
-            self.bot.unload_extension(f"cogs.{cog}")
-            await ctx.respond(f"**cogs.{cog}** выгружается...")
-        else:
-            await ctx.respond("Недостаточно прав для выполнения данной команды.")
+        if await self.deny_if_not_admin(ctx, server_data):
+            return
+
+        self.bot.unload_extension(f"cogs.{cog}")
+        await ctx.respond(f"**cogs.{cog}** выгружается...")
 
     @service.command(description="Загрузить модуль")
     @discord.option("cog", description="Название модуля")
     async def load(self, ctx, cog: str):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
-        if ctx.author.id == server_data.get("admin_id"):
-            self.bot.load_extension(f"cogs.{cog}")
-            await ctx.respond(f"**cogs.{cog}** запускается...")
-        else:
-            await ctx.respond("Недостаточно прав для выполнения данной команды.")
+        if await self.deny_if_not_admin(ctx, server_data):
+            return
+
+        self.bot.load_extension(f"cogs.{cog}")
+        await ctx.respond(f"**cogs.{cog}** запускается...")
 
     @service.command(description="Перезагрузить модуль")
     @discord.option("cog", description="Название модуля")
     async def reload(self, ctx, cog: str):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
-        if ctx.author.id == server_data.get("admin_id"):
-            self.bot.unload_extension(f"cogs.{cog}")
-            self.bot.load_extension(f"cogs.{cog}")
-            await ctx.respond(f"**cogs.{cog}** перезапускается...")
-        else:
-            await ctx.respond("Недостаточно прав для выполнения данной команды.")
+        if await self.deny_if_not_admin(ctx, server_data):
+            return
+
+        self.bot.unload_extension(f"cogs.{cog}")
+        self.bot.load_extension(f"cogs.{cog}")
+        await ctx.respond(f"**cogs.{cog}** перезапускается...")
 
 
 def setup(bot):

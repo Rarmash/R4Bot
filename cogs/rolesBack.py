@@ -13,13 +13,13 @@ class RolesBack(commands.Cog):
         author_id = str(member.id)
         server_id = str(member.guild.id)
         roles_data = get_from_record(server_id, "UserRoles", author_id)
+        if not roles_data:
+            return
 
-        # If the user has saved role data, restore the roles
-        if roles_data:
-            roles = [int(role_id) for role_id in roles_data["roles"] if role_id and role_id != str(member.guild.id)]
-            roles_to_add = [discord.utils.get(member.guild.roles, id=role_id) for role_id in roles if
-                            discord.utils.get(member.guild.roles, id=role_id)]
-            await member.add_roles(*roles_to_add)
+        roles = [int(role_id) for role_id in roles_data["roles"] if role_id and role_id != str(member.guild.id)]
+        roles_to_add = [discord.utils.get(member.guild.roles, id=role_id) for role_id in roles]
+        roles_to_add = [role for role in roles_to_add if role is not None]
+        await member.add_roles(*roles_to_add)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
