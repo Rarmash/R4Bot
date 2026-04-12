@@ -53,6 +53,16 @@ def get_timestamp(value: datetime.datetime) -> int:
     )
 
 
+def format_voice_duration(total_seconds):
+    hours, remainder = divmod(int(total_seconds), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours} ч {minutes} м"
+    if minutes:
+        return f"{minutes} м {seconds} с"
+    return f"{seconds} с"
+
+
 class Profile(commands.Cog):
     def __init__(self, bot, servers_data):
         self.bot = bot
@@ -85,8 +95,9 @@ class Profile(commands.Cog):
             embed.add_field(name="На сервере с", value=f"<t:{get_timestamp(user.joined_at)}:f>")
 
             if not user.bot and user_data:
-                embed.add_field(name="Сообщений", value=user_data["messages"])
-                embed.add_field(name="Всего тайм-аутов", value=user_data["timeouts"])
+                embed.add_field(name="Сообщений", value=user_data.get("messages", 0))
+                embed.add_field(name="Всего тайм-аутов", value=user_data.get("timeouts", 0))
+                embed.add_field(name="Голосовая активность", value=format_voice_duration(user_data.get("voice", 0)))
 
                 if "xbox" in user_data:
                     gamertag = get_xbox_gamertag_to_profile(user_data["xbox"])

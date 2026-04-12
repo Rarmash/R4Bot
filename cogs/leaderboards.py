@@ -8,7 +8,17 @@ from modules.firebase import filter_records_by_quantity, get_all_records
 from options import servers_data
 
 
-def generate_leaderboard_string(data_list):
+def format_voice_duration(total_seconds):
+    hours, remainder = divmod(int(total_seconds), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours} ч {minutes} м"
+    if minutes:
+        return f"{minutes} м {seconds} с"
+    return f"{seconds} с"
+
+
+def generate_leaderboard_string(data_list, value_formatter=str):
     def get_place_icon(index):
         if index == 0:
             return "🥇"
@@ -19,7 +29,7 @@ def generate_leaderboard_string(data_list):
         return f"{index + 1}."
 
     return "\n".join(
-        f"{get_place_icon(index)} <@{user[0]}>: {user[1]}" for index, user in enumerate(data_list[:10])
+        f"{get_place_icon(index)} <@{user[0]}>: {value_formatter(user[1])}" for index, user in enumerate(data_list[:10])
     )
 
 
@@ -91,6 +101,40 @@ class Leaderboards(commands.Cog):
             current_messages = leaderboard[author_position][1]
             embed.set_footer(text=f"Вам осталось {tenth_place_messages - current_messages + 1} сообщений до 10-го места")
 
+        await ctx.respond(embed=embed)
+
+    @leaderboard_cmd.command(description="Посмотреть таблицу лидеров по голосовой активности")
+    @discord.guild_only()
+    async def voice(self, ctx):
+        server_data = self.get_server_data(ctx.guild.id)
+        if not server_data:
+            return
+
+        users = get_all_records(str(ctx.guild.id), "Users") or {}
+        leaderboard = [
+            [user_id, user_data.get("voice", 0)]
+            for user_id, user_data in users.items()
+            if user_data.get("voice", 0) > 0
+        ]
+        leaderboard.sort(key=lambda items: items[1], reverse=True)
+
+        total_voice_seconds = sum(user[1] for user in leaderboard)
+        embed = discord.Embed(
+            title="Лидеры по голосовой активности",
+            description=generate_leaderboard_string(leaderboard, format_voice_duration),
+            color=int(server_data.get("accent_color"), 16),
+        )
+
+        author_id = str(ctx.author.id)
+        author_position = next((index for index, user in enumerate(leaderboard) if user[0] == author_id), None)
+        if author_position is not None and author_position >= 10:
+            user = leaderboard[author_position]
+            embed.add_field(
+                name="Ваше положение в таблице",
+                value=f"{author_position + 1}. <@{user[0]}>: {format_voice_duration(user[1])}\n",
+            )
+
+        embed.set_footer(text=f"Всего наговорено {format_voice_duration(total_voice_seconds)}")
         await ctx.respond(embed=embed)
 
 
