@@ -9,18 +9,17 @@ class Timeouts(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        # Check if the member (user) is timed out
-        if after.timed_out:
-            author = str(after.id)
-            timeoutCount = get_from_record(str(after.guild.id), "Users", author)
-            if timeoutCount is None:
-                # If the user is not found in the collection, create a new document for them
-                timeoutCount = {"timeouts": 1}
-                update_record(str(after.guild.id), "Users", author, timeoutCount)
-            else:
-                # If the user is already in the collection, update their timeouts count
-                timeoutCount["timeouts"] += 1
-                update_record(str(after.guild.id), "Users", author, timeoutCount)
+        if not after.timed_out:
+            return
+
+        author = str(after.id)
+        timeout_count = get_from_record(str(after.guild.id), "Users", author)
+        if timeout_count is None:
+            timeout_count = {"timeouts": 1}
+        else:
+            timeout_count["timeouts"] += 1
+
+        update_record(str(after.guild.id), "Users", author, timeout_count)
 
 
 def setup(bot):

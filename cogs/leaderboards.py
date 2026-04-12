@@ -4,101 +4,137 @@ import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
 
-from modules.firebase import get_all_records, filter_records_by_quantity
+from modules.firebase import filter_records_by_quantity, get_all_records
 from options import servers_data
 
 
-# Helper function to generate a leaderboard string for display
-def generate_leaderboard_string(data_list):
-    # Create a formatted leaderboard string with medals for the top 3 users
-    # and numbering for others (up to 10 users).
-    desk = '\n'.join(
-        [f'{("🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else str(i + 1) + ".")} <@{user[0]}>: {user[1]}'
-         for i, user in enumerate(data_list[:10])])
-    return desk
+def format_voice_duration(total_seconds):
+    hours, remainder = divmod(int(total_seconds), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours} ч {minutes} м"
+    if minutes:
+        return f"{minutes} м {seconds} с"
+    return f"{seconds} с"
+
+
+def generate_leaderboard_string(data_list, value_formatter=str):
+    def get_place_icon(index):
+        if index == 0:
+            return "🥇"
+        if index == 1:
+            return "🥈"
+        if index == 2:
+            return "🥉"
+        return f"{index + 1}."
+
+    return "\n".join(
+        f"{get_place_icon(index)} <@{user[0]}>: {value_formatter(user[1])}" for index, user in enumerate(data_list[:10])
+    )
 
 
 class Leaderboards(commands.Cog):
+    leaderboard_cmd = SlashCommandGroup("leaderboard", "Таблицы лидеров")
+
     def __init__(self, bot, servers_data):
         self.bot = bot
         self.servers_data = servers_data
 
-    leaderboard_cmd = SlashCommandGroup("leaderboard", "Таблицы лидеров")
+    def get_server_data(self, guild_id: int):
+        return self.servers_data.get(str(guild_id))
 
-    # Slash command to view the leaderboard for timeouts
-    @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по тайм-аутам')
+    @leaderboard_cmd.command(description="Посмотреть таблицу лидеров по тайм-аутам")
     @discord.guild_only()
     async def timeouts(self, ctx):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
         users = get_all_records(str(ctx.guild.id), "Users")
-        new_leaderboard = []
+        leaderboard = [
+            [user_id, user_data.get("timeouts", 0)]
+            for user_id, user_data in users.items()
+            if user_data.get("timeouts", 0) != 0
+        ]
+        leaderboard.sort(key=lambda items: items[1], reverse=True)
 
-        # Filter users with non-zero timeouts and store them in a new leaderboard
-        for user_id, user_data in users.items():
-            if user_data.get("timeouts", 0) != 0:
-                new_leaderboard.append([user_id, user_data.get("timeouts", 0)])
-
-        # Sort the new leaderboard based on the number of timeouts in descending order
-        new_leaderboard.sort(key=lambda items: items[1], reverse=True)
-
-        # Calculate the total number of timeouts
-        kolvo = sum(user[1] for user in new_leaderboard)
-
-        # Generate the formatted leaderboard string
-        data_list = generate_leaderboard_string(new_leaderboard)
-
-        # Create and send the leaderboard embed
-        embed = discord.Embed(title='Лидеры по тайм-аутам',
-                              description=data_list, color=int(server_data.get("accent_color"), 16))
-        embed.set_footer(text=f"Всего получено {kolvo} тайм-аутов")
+        total_timeouts = sum(user[1] for user in leaderboard)
+        embed = discord.Embed(
+            title="Лидеры по тайм-аутам",
+            description=generate_leaderboard_string(leaderboard),
+            color=int(server_data.get("accent_color"), 16),
+        )
+        embed.set_footer(text=f"Всего получено {total_timeouts} тайм-аутов")
         await ctx.respond(embed=embed)
 
-    # Command to view the leaderboard for messages
-    @leaderboard_cmd.command(description='Посмотреть таблицу лидеров по сообщениям')
+    @leaderboard_cmd.command(description="Посмотреть таблицу лидеров по сообщениям")
     @discord.guild_only()
     async def messages(self, ctx):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
         users = json.loads(filter_records_by_quantity(str(ctx.guild.id), "Users", "messages", 1))
-        new_leaderboard = [[user_id, user_data.get("messages", 0)] for user_id, user_data in users.items()]
+        leaderboard = [[user_id, user_data.get("messages", 0)] for user_id, user_data in users.items()]
+        leaderboard.sort(key=lambda items: items[1], reverse=True)
 
-        # Sort the new leaderboard based on the number of messages in descending order
-        new_leaderboard.sort(key=lambda items: items[1], reverse=True)
+        total_messages = sum(user[1] for user in leaderboard)
+        embed = discord.Embed(
+            title="Лидеры по сообщениям",
+            description=generate_leaderboard_string(leaderboard),
+            color=int(server_data.get("accent_color"), 16),
+        )
 
-        # Calculate the total number of messages
-        kolvo = sum(user[1] for user in new_leaderboard)
+        author_id = str(ctx.author.id)
+        author_position = next((index for index, user in enumerate(leaderboard) if user[0] == author_id), None)
+        if author_position is not None and author_position >= 10:
+            user = leaderboard[author_position]
+            embed.add_field(
+                name="Ваше положение в таблице",
+                value=f"{author_position + 1}. <@{user[0]}>: {user[1]}\n",
+            )
 
-        # Generate the formatted leaderboard string
-        data_list = generate_leaderboard_string(new_leaderboard)
-        embed = discord.Embed(title='Лидеры по сообщениям',
-                              description=data_list, color=int(server_data.get("accent_color"), 16))
-
-        # Create and send the leaderboard embed
-        embed = discord.Embed(title='Лидеры по сообщениям', description=data_list,
-                              color=int(server_data.get("accent_color"), 16))
-
-        # Check the author's position in the leaderboard and display accordingly
-        user_id = str(ctx.author.id)
-        for i, user in enumerate(new_leaderboard):
-            if user[0] == user_id and i >= 10:
-                embed.add_field(name="Ваше положение в таблице", value=f'{i + 1}. <@{user[0]}>: {user[1]}\n')
-                break
-            elif user[0] == user_id:
-                break
-
-        # Set the footer text based on the number of users in the leaderboard
-        if len(new_leaderboard) <= 10 or i + 1 <= 10:
-            embed.set_footer(text=f"Всего отправлено {kolvo} сообщений")
+        if author_position is None or author_position < 10 or len(leaderboard) <= 10:
+            embed.set_footer(text=f"Всего отправлено {total_messages} сообщений")
         else:
-            place10 = new_leaderboard[9][1]
-            urplace = new_leaderboard[i][1] if i >= 10 else 0
-            embed.set_footer(text=f"Вам осталось {place10 - urplace + 1} сообщений до 10-го места")
+            tenth_place_messages = leaderboard[9][1]
+            current_messages = leaderboard[author_position][1]
+            embed.set_footer(text=f"Вам осталось {tenth_place_messages - current_messages + 1} сообщений до 10-го места")
 
+        await ctx.respond(embed=embed)
+
+    @leaderboard_cmd.command(description="Посмотреть таблицу лидеров по голосовой активности")
+    @discord.guild_only()
+    async def voice(self, ctx):
+        server_data = self.get_server_data(ctx.guild.id)
+        if not server_data:
+            return
+
+        users = get_all_records(str(ctx.guild.id), "Users") or {}
+        leaderboard = [
+            [user_id, user_data.get("voice", 0)]
+            for user_id, user_data in users.items()
+            if user_data.get("voice", 0) > 0
+        ]
+        leaderboard.sort(key=lambda items: items[1], reverse=True)
+
+        total_voice_seconds = sum(user[1] for user in leaderboard)
+        embed = discord.Embed(
+            title="Лидеры по голосовой активности",
+            description=generate_leaderboard_string(leaderboard, format_voice_duration),
+            color=int(server_data.get("accent_color"), 16),
+        )
+
+        author_id = str(ctx.author.id)
+        author_position = next((index for index, user in enumerate(leaderboard) if user[0] == author_id), None)
+        if author_position is not None and author_position >= 10:
+            user = leaderboard[author_position]
+            embed.add_field(
+                name="Ваше положение в таблице",
+                value=f"{author_position + 1}. <@{user[0]}>: {format_voice_duration(user[1])}\n",
+            )
+
+        embed.set_footer(text=f"Всего наговорено {format_voice_duration(total_voice_seconds)}")
         await ctx.respond(embed=embed)
 
 

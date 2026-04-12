@@ -15,21 +15,17 @@ STEAM_API_BASE = "https://api.steampowered.com"
 def get_steam_id(ctx, steamid64, url_or_username=None):
     if steamid64:
         return steamid64
-
     if url_or_username:
         return None
 
     author_id = str(ctx.author.id)
     user_data = get_from_record(str(ctx.guild.id), "Users", author_id)
-    if user_data:
-        return user_data.get("steam")
-    return None
+    return user_data.get("steam") if user_data else None
 
 
 def parse_steam_identity(steamid64=None, url_or_username=None):
     if steamid64:
         return steamid64, None
-
     if not url_or_username:
         return None, None
 
@@ -58,7 +54,6 @@ def resolve_steam_id(steamid64=None, url_or_username=None):
     direct_steam_id, vanity = parse_steam_identity(steamid64=steamid64, url_or_username=url_or_username)
     if direct_steam_id:
         return str(direct_steam_id)
-
     if not vanity:
         return None
 
@@ -83,23 +78,23 @@ def get_player_bans(steam_id):
 
 def get_player_level(steam_id):
     payload = steam_api_get("IPlayerService/GetSteamLevel/v1/", steamid=steam_id)
-    response = payload.get("response", {})
-    return response.get("player_level")
+    return payload.get("response", {}).get("player_level")
 
 
 def normalize_profile_url(summary, steam_id):
     profile_url = summary.get("profileurl")
-    if profile_url:
-        return profile_url
-    return f"https://steamcommunity.com/profiles/{steam_id}" if steam_id else None
+    return profile_url or (f"https://steamcommunity.com/profiles/{steam_id}" if steam_id else None)
 
 
 class Steam(commands.Cog):
+    steam = SlashCommandGroup("steam", "Команды по Steam")
+
     def __init__(self, bot, servers_data):
         self.bot = bot
         self.servers_data = servers_data
 
-    steam = SlashCommandGroup("steam", "Команды по Steam")
+    def get_server_data(self, guild_id: int):
+        return self.servers_data.get(str(guild_id))
 
     @staticmethod
     def get_steam_error_message(error):
@@ -116,7 +111,7 @@ class Steam(commands.Cog):
     @discord.option("appid", description="ID игры в Steam")
     @discord.option("countrycode", description="Код страны", choices=["RU", "US", "TR", "AR", "DE", "UA", "KZ"])
     async def price(self, ctx: discord.ApplicationContext, appid: int, countrycode: str):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
@@ -131,17 +126,13 @@ class Steam(commands.Cog):
                 return
 
             app_data = payload[f"{appid}"]["data"]
-
             embed = discord.Embed(
                 title=app_data.get("name"),
                 description=app_data.get("short_description"),
                 color=int(server_data.get("accent_color"), 16),
             )
             embed.set_thumbnail(url=app_data.get("header_image"))
-            embed.add_field(
-                name="Дата выпуска",
-                value=app_data.get("release_date", {}).get("date", "Неизвестно"),
-            )
+            embed.add_field(name="Дата выпуска", value=app_data.get("release_date", {}).get("date", "Неизвестно"))
             embed.add_field(name="Разработчик", value=", ".join(app_data.get("developers", [])) or "Неизвестно")
             embed.add_field(name="Издатель", value=", ".join(app_data.get("publishers", [])) or "Неизвестно")
 
@@ -166,7 +157,7 @@ class Steam(commands.Cog):
     @discord.option("steamid64", description="SteamID64", required=False)
     @discord.option("url_or_username", description="Ссылка на профиль или имя пользователя после ../id/", required=False)
     async def profile(self, ctx: discord.ApplicationContext, steamid64: str, url_or_username: str):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
@@ -203,24 +194,15 @@ class Steam(commands.Cog):
         embed.set_thumbnail(url=summary.get("avatarfull"))
 
         time_created = summary.get("timecreated")
+        economy_ban = bans.get("EconomyBan", "none")
+        profile_url = normalize_profile_url(summary, steam_id)
+
         embed.add_field(name="Аккаунт создан", value=f"<t:{time_created}:D>" if time_created else "Отсутствует")
         embed.add_field(name="Настоящее имя", value=summary.get("realname") or "Отсутствует")
         embed.add_field(name="Местоположение", value=summary.get("loccountrycode") or "Отсутствует")
-        embed.add_field(
-            name="VAC-баны",
-            value="Имеются" if bans.get("NumberOfVACBans", 0) != 0 else "Отсутствуют",
-        )
-        economy_ban = bans.get("EconomyBan", "none")
-        embed.add_field(
-            name="Trade-бан",
-            value="Есть" if str(economy_ban).lower() not in {"none", "0", ""} else "Отсутствует",
-        )
-        embed.add_field(
-            name="Лимит на аккаунте ($5)",
-            value="Имеется" if (player_level or 0) == 0 else "Отсутствует",
-        )
-
-        profile_url = normalize_profile_url(summary, steam_id)
+        embed.add_field(name="VAC-баны", value="Имеются" if bans.get("NumberOfVACBans", 0) != 0 else "Отсутствуют")
+        embed.add_field(name="Trade-бан", value="Есть" if str(economy_ban).lower() not in {"none", "0", ""} else "Отсутствует")
+        embed.add_field(name="Лимит на аккаунте ($5)", value="Имеется" if (player_level or 0) == 0 else "Отсутствует")
         embed.add_field(name="Ссылка на профиль", value=f"[Тык]({profile_url})" if profile_url else "Отсутствует")
 
         try:
@@ -237,7 +219,7 @@ class Steam(commands.Cog):
     @discord.option("steamid64", description="SteamID64", required=False)
     @discord.option("url_or_username", description="Ссылка на профиль или имя пользователя после ../id/", required=False)
     async def connect(self, ctx: discord.ApplicationContext, steamid64: str, url_or_username: str):
-        server_data = self.servers_data.get(str(ctx.guild.id))
+        server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
             return
 
@@ -259,7 +241,6 @@ class Steam(commands.Cog):
             return
 
         update_record(str(ctx.guild.id), "Users", author_id, {"steam": str(steam_id)})
-
         embed = discord.Embed(
             description=f"Аккаунт **{summary.get('personaname', 'Неизвестный пользователь')}** был успешно привязан к твоей учётной записи!",
             color=int(server_data.get("accent_color"), 16),
