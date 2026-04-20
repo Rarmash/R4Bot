@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlparse
 
 import discord
@@ -29,6 +30,8 @@ def parse_steam_identity(steamid64=None, url_or_username=None):
     if not url_or_username:
         return None, None
 
+    url_or_username = str(url_or_username).strip().rstrip("/")
+
     parsed = urlparse(url_or_username)
     if parsed.netloc:
         path_parts = [part for part in parsed.path.split("/") if part]
@@ -50,6 +53,18 @@ def steam_api_get(endpoint, **params):
     return response.json()
 
 
+def resolve_vanity_via_community(vanity: str):
+    response = requests.get(
+        f"https://steamcommunity.com/id/{vanity}/?xml=1",
+        timeout=30,
+        headers={"User-Agent": "R4Bot/1.0"},
+    )
+    response.raise_for_status()
+
+    match = re.search(r"<steamID64>\s*(\d+)\s*</steamID64>", response.text)
+    return match.group(1) if match else None
+
+
 def resolve_steam_id(steamid64=None, url_or_username=None):
     direct_steam_id, vanity = parse_steam_identity(steamid64=steamid64, url_or_username=url_or_username)
     if direct_steam_id:
@@ -57,11 +72,15 @@ def resolve_steam_id(steamid64=None, url_or_username=None):
     if not vanity:
         return None
 
-    payload = steam_api_get("ISteamUser/ResolveVanityURL/v0001/", vanityurl=vanity)
-    response = payload.get("response", {})
-    if response.get("success") != 1:
-        return None
-    return response.get("steamid")
+    try:
+        payload = steam_api_get("ISteamUser/ResolveVanityURL/v0001/", vanityurl=vanity)
+        response = payload.get("response", {})
+        if response.get("success") == 1:
+            return response.get("steamid")
+    except requests.ConnectionError:
+        pass
+
+    return resolve_vanity_via_community(vanity)
 
 
 def get_player_summary(steam_id):

@@ -397,7 +397,7 @@ class Tts(commands.Cog):
 
         return voice_client
 
-    async def play_audio_file(self, voice_client, temp_file: Path, tts_id: int | None = None):
+    async def play_audio_file(self, voice_channel, temp_file: Path, tts_id: int | None = None):
         playback_started = False
         last_error = None
 
@@ -405,10 +405,14 @@ class Tts(commands.Cog):
             if tts_id is not None and tts_id in self.skipped_tts_ids:
                 return
 
+            voice_client = await self.ensure_voice_client(voice_channel)
             if not voice_client:
                 last_error = RuntimeError("Voice client was not created.")
                 await asyncio.sleep(1)
                 continue
+
+            if not temp_file.exists() or temp_file.stat().st_size == 0:
+                raise RuntimeError("TTS audio file was not created correctly.")
 
             if voice_client.is_playing():
                 voice_client.stop()
@@ -425,6 +429,15 @@ class Tts(commands.Cog):
                     wait_finish=True,
                 )
 
+                await asyncio.sleep(0.75)
+                if not voice_client.is_playing():
+                    if playback and playback.done():
+                        error = playback.result()
+                        if error:
+                            raise error
+
+                    raise RuntimeError("Voice playback did not start.")
+
                 if playback:
                     error = await asyncio.wait_for(playback, timeout=PLAYBACK_TIMEOUT)
                     if error:
@@ -436,10 +449,12 @@ class Tts(commands.Cog):
                 last_error = TimeoutError("TTS playback timed out.")
                 if voice_client.is_playing():
                     voice_client.stop()
+                await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 timed out.")
                 await asyncio.sleep(1)
             except Exception as playback_error:
                 last_error = playback_error
+                await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 failed: {playback_error}")
                 await asyncio.sleep(1)
 
@@ -492,8 +507,7 @@ class Tts(commands.Cog):
                     if temp_file is None:
                         continue
 
-                    voice_client = await self.ensure_voice_client(voice_channel)
-                    await self.play_audio_file(voice_client, temp_file, tts_id=tts_id)
+                    await self.play_audio_file(voice_channel, temp_file, tts_id=tts_id)
                 finally:
                     await self.safe_unlink_temp_file(temp_file)
 
