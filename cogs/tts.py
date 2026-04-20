@@ -18,6 +18,8 @@ FFMPEG_OPTIONS = {
 }
 MAX_TTS_CHUNK_LENGTH = 180
 EMPTY_CHANNEL_DISCONNECT_DELAY = 3
+GTTS_GENERATION_TIMEOUT = 20
+PLAYBACK_TIMEOUT = 45
 TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
 GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
 MP4_URL_PATTERN = re.compile(r"https?://\S+?\.mp4(?:\?\S*)?|www\.\S+?\.mp4(?:\?\S*)?", re.IGNORECASE)
@@ -329,12 +331,18 @@ class Tts(commands.Cog):
                 )
 
                 if playback:
-                    error = await playback
+                    error = await asyncio.wait_for(playback, timeout=PLAYBACK_TIMEOUT)
                     if error:
                         raise error
 
                 playback_started = True
                 break
+            except asyncio.TimeoutError:
+                last_error = TimeoutError("TTS playback timed out.")
+                if voice_client.is_playing():
+                    voice_client.stop()
+                print(f"TTS playback attempt {attempt + 1}/3 timed out.")
+                await asyncio.sleep(1)
             except Exception as playback_error:
                 last_error = playback_error
                 print(f"TTS playback attempt {attempt + 1}/3 failed: {playback_error}")
@@ -356,9 +364,14 @@ class Tts(commands.Cog):
                     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
                         temp_file = Path(temp_audio.name)
 
-                    await asyncio.to_thread(gTTS(chunk, lang=language).save, str(temp_file))
+                    await asyncio.wait_for(
+                        asyncio.to_thread(gTTS(chunk, lang=language).save, str(temp_file)),
+                        timeout=GTTS_GENERATION_TIMEOUT,
+                    )
                     voice_client = await self.ensure_voice_client(voice_channel)
                     await self.play_audio_file(voice_client, temp_file)
+                except asyncio.TimeoutError:
+                    print("TTS chunk generation timed out, skipping chunk.")
                 finally:
                     if temp_file and temp_file.exists():
                         temp_file.unlink(missing_ok=True)
