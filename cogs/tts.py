@@ -20,6 +20,7 @@ MAX_TTS_CHUNK_LENGTH = 180
 EMPTY_CHANNEL_DISCONNECT_DELAY = 3
 GTTS_GENERATION_TIMEOUT = 20
 PLAYBACK_TIMEOUT = 45
+TTS_MESSAGE_TIMEOUT = 150
 TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
 GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
 MP4_URL_PATTERN = re.compile(r"https?://\S+?\.mp4(?:\?\S*)?|www\.\S+?\.mp4(?:\?\S*)?", re.IGNORECASE)
@@ -95,6 +96,9 @@ def strip_discord_markdown(text: str) -> str:
 def get_attachment_tts_labels(message) -> list[str]:
     labels = []
 
+    for _sticker in getattr(message, "stickers", []):
+        labels.append("Стикер")
+
     for attachment in getattr(message, "attachments", []):
         content_type = (attachment.content_type or "").lower()
         filename = (attachment.filename or "").lower()
@@ -149,19 +153,36 @@ def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[st
     if len(normalized_text) <= chunk_size:
         return [normalized_text]
 
+    sentence_parts = re.split(r"(?<=[.!?])\s+", normalized_text)
     chunks = []
     current_chunk = []
     current_length = 0
 
-    for word in normalized_text.split():
-        word_length = len(word) + (1 if current_chunk else 0)
-        if current_chunk and current_length + word_length > chunk_size:
-            chunks.append(" ".join(current_chunk))
-            current_chunk = [word]
-            current_length = len(word)
-        else:
-            current_chunk.append(word)
-            current_length += word_length
+    for sentence in sentence_parts:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+
+        if len(sentence) <= chunk_size:
+            sentence_length = len(sentence) + (1 if current_chunk else 0)
+            if current_chunk and current_length + sentence_length > chunk_size:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = [sentence]
+                current_length = len(sentence)
+            else:
+                current_chunk.append(sentence)
+                current_length += sentence_length
+            continue
+
+        for word in sentence.split():
+            word_length = len(word) + (1 if current_chunk else 0)
+            if current_chunk and current_length + word_length > chunk_size:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = [word]
+                current_length = len(word)
+            else:
+                current_chunk.append(word)
+                current_length += word_length
 
     if current_chunk:
         chunks.append(" ".join(current_chunk))
@@ -178,6 +199,77 @@ class Tts(commands.Cog):
         self.worker_task = None
         self.last_user_message = {}
         self.pending_disconnects = {}
+        self.current_tts_id = None
+        self.skipped_tts_ids = set()
+
+    def get_server_data(self, guild_id: int):
+        return self.servers_data.get(str(guild_id))
+
+    def can_skip_tts(self, ctx, server_data) -> bool:
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
+
+        admin_role = discord.utils.get(ctx.guild.roles, id=server_data.get("admin_role_id"))
+        mod_role = discord.utils.get(ctx.guild.roles, id=server_data.get("mod_role_id"))
+        return (
+            (admin_role is not None and admin_role in ctx.author.roles)
+            or (mod_role is not None and mod_role in ctx.author.roles)
+        )
+
+    async def reset_voice_client(self, guild):
+        voice_client = guild.voice_client
+        if voice_client is None:
+            return
+
+        try:
+            if voice_client.is_playing():
+                voice_client.stop()
+        except Exception:
+            pass
+
+        try:
+            await voice_client.disconnect(force=True)
+        except Exception as exc:
+            print(f"Error while resetting voice client: {exc}")
+
+    async def safe_unlink_temp_file(self, temp_file: Path | None):
+        if temp_file is None:
+            return
+
+        for attempt in range(5):
+            try:
+                temp_file.unlink(missing_ok=True)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    print(f"Failed to remove temp TTS file after retries: {temp_file}")
+                    return
+                await asyncio.sleep(0.3 * (attempt + 1))
+            except FileNotFoundError:
+                return
+
+    @commands.slash_command(description="Пропустить текущее TTS-сообщение")
+    @discord.guild_only()
+    async def skiptts(self, ctx: discord.ApplicationContext):
+        server_data = self.get_server_data(ctx.guild.id)
+        if not server_data:
+            return
+
+        if not self.can_skip_tts(ctx, server_data):
+            await ctx.respond("Недостаточно прав для выполнения данной команды.", ephemeral=True)
+            return
+
+        if self.current_tts_id is None:
+            await ctx.respond("Сейчас нет активного TTS-сообщения.", ephemeral=True)
+            return
+
+        self.skipped_tts_ids.add(self.current_tts_id)
+
+        voice_client = ctx.guild.voice_client
+        if voice_client and voice_client.is_playing():
+            voice_client.stop()
+
+        await ctx.respond("Текущее TTS-сообщение пропущено.", ephemeral=True)
 
     async def disconnect_if_channel_empty(self, guild):
         voice_client = guild.voice_client
@@ -305,11 +397,14 @@ class Tts(commands.Cog):
 
         return voice_client
 
-    async def play_audio_file(self, voice_client, temp_file: Path):
+    async def play_audio_file(self, voice_client, temp_file: Path, tts_id: int | None = None):
         playback_started = False
         last_error = None
 
         for attempt in range(3):
+            if tts_id is not None and tts_id in self.skipped_tts_ids:
+                return
+
             if not voice_client:
                 last_error = RuntimeError("Voice client was not created.")
                 await asyncio.sleep(1)
@@ -351,30 +446,59 @@ class Tts(commands.Cog):
         if not playback_started and last_error:
             raise last_error
 
-    async def process_speech_chunks(self, voice_channel, source_channel, speech: str):
+    async def generate_tts_file(self, chunk: str, language: str) -> Path | None:
+        temp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
+                temp_file = Path(temp_audio.name)
+
+            await asyncio.wait_for(
+                asyncio.to_thread(gTTS(chunk, lang=language).save, str(temp_file)),
+                timeout=GTTS_GENERATION_TIMEOUT,
+            )
+            return temp_file
+        except asyncio.TimeoutError:
+            print("TTS chunk generation timed out, skipping chunk.")
+        except Exception as exc:
+            print(f"TTS chunk generation failed: {exc}")
+
+        await self.safe_unlink_temp_file(temp_file)
+        return None
+
+    async def process_speech_chunks(self, voice_channel, source_channel, speech: str, tts_id: int):
         language = detect_tts_language(speech)
         chunks = split_tts_text(speech)
         voice_client = await self.ensure_voice_client(voice_channel)
 
+        if not chunks:
+            return
+
         typing_context = await self.safe_typing_context(source_channel)
         async with typing_context:
-            for chunk in chunks:
+            next_file_task = asyncio.create_task(self.generate_tts_file(chunks[0], language))
+
+            for index, _chunk in enumerate(chunks):
                 temp_file = None
                 try:
-                    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
-                        temp_file = Path(temp_audio.name)
+                    if tts_id in self.skipped_tts_ids:
+                        break
 
-                    await asyncio.wait_for(
-                        asyncio.to_thread(gTTS(chunk, lang=language).save, str(temp_file)),
-                        timeout=GTTS_GENERATION_TIMEOUT,
-                    )
+                    temp_file = await next_file_task
+                    if index + 1 < len(chunks):
+                        next_file_task = asyncio.create_task(self.generate_tts_file(chunks[index + 1], language))
+                    else:
+                        next_file_task = None
+
+                    if temp_file is None:
+                        continue
+
                     voice_client = await self.ensure_voice_client(voice_channel)
-                    await self.play_audio_file(voice_client, temp_file)
-                except asyncio.TimeoutError:
-                    print("TTS chunk generation timed out, skipping chunk.")
+                    await self.play_audio_file(voice_client, temp_file, tts_id=tts_id)
                 finally:
-                    if temp_file and temp_file.exists():
-                        temp_file.unlink(missing_ok=True)
+                    await self.safe_unlink_temp_file(temp_file)
+
+            if next_file_task is not None and not next_file_task.done():
+                next_file_task.cancel()
 
     async def process_queue(self):
         if self.is_playing:
@@ -386,10 +510,21 @@ class Tts(commands.Cog):
             while not self.message_queue.empty():
                 try:
                     voice_channel, source_channel, speech = await self.message_queue.get()
-                    await self.process_speech_chunks(voice_channel, source_channel, speech)
+                    current_tts_id = id((voice_channel.id, speech, discord.utils.utcnow().timestamp()))
+                    self.current_tts_id = current_tts_id
+                    await asyncio.wait_for(
+                        self.process_speech_chunks(voice_channel, source_channel, speech, current_tts_id),
+                        timeout=TTS_MESSAGE_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    print("TTS message processing timed out, resetting voice client and continuing.")
+                    await self.reset_voice_client(voice_channel.guild)
                 except Exception as exc:
                     print(f"Error during playback: {exc}")
                 finally:
+                    if self.current_tts_id is not None:
+                        self.skipped_tts_ids.discard(self.current_tts_id)
+                    self.current_tts_id = None
                     self.message_queue.task_done()
 
             for guild in self.Bot.guilds:

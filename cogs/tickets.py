@@ -22,6 +22,9 @@ class TicketButtons(discord.ui.View):
         if not server_data:
             return
 
+        if interaction.user.id == interaction.guild.owner_id:
+            return True
+
         mod_role = discord.utils.get(interaction.guild.roles, id=server_data.get("mod_role_id"))
         admin_role = discord.utils.get(interaction.guild.roles, id=server_data.get("admin_role_id"))
         if mod_role in interaction.user.roles or admin_role in interaction.user.roles:
