@@ -1,6 +1,7 @@
 import asyncio
 import re
 import tempfile
+import unicodedata
 from asyncio import Queue
 from contextlib import nullcontext
 from pathlib import Path
@@ -13,15 +14,126 @@ from options import servers_data
 
 FFMPEG_OPTIONS = {
     "before_options": "-nostdin",
-    "options": '-vn -filter:a "atempo=1.3"',
+    "options": '-vn -filter:a "atempo=1.6"',
 }
 MAX_TTS_CHUNK_LENGTH = 180
+EMPTY_CHANNEL_DISCONNECT_DELAY = 3
+TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
+GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
+MP4_URL_PATTERN = re.compile(r"https?://\S+?\.mp4(?:\?\S*)?|www\.\S+?\.mp4(?:\?\S*)?", re.IGNORECASE)
+URL_PATTERN = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+
+
+def is_emoji_character(char: str) -> bool:
+    codepoint = ord(char)
+    return (
+        0x1F300 <= codepoint <= 0x1F5FF
+        or 0x1F600 <= codepoint <= 0x1F64F
+        or 0x1F680 <= codepoint <= 0x1F6FF
+        or 0x1F700 <= codepoint <= 0x1F77F
+        or 0x1F780 <= codepoint <= 0x1F7FF
+        or 0x1F800 <= codepoint <= 0x1F8FF
+        or 0x1F900 <= codepoint <= 0x1F9FF
+        or 0x1FA00 <= codepoint <= 0x1FAFF
+        or 0x2600 <= codepoint <= 0x26FF
+        or 0x2700 <= codepoint <= 0x27BF
+        or 0xFE00 <= codepoint <= 0xFE0F
+        or 0x1F1E6 <= codepoint <= 0x1F1FF
+        or 0x1F3FB <= codepoint <= 0x1F3FF
+        or codepoint in {0x200D, 0x20E3}
+    )
+
+
+def replace_unicode_emojis(text: str) -> str:
+    result = []
+    in_emoji_sequence = False
+
+    for char in text:
+        if is_emoji_character(char):
+            if not in_emoji_sequence:
+                if result and not result[-1].endswith(" "):
+                    result.append(" ")
+                result.append("Эмодзи")
+                in_emoji_sequence = True
+            continue
+
+        if unicodedata.category(char) == "So":
+            if not in_emoji_sequence:
+                if result and not result[-1].endswith(" "):
+                    result.append(" ")
+                result.append("Эмодзи")
+                in_emoji_sequence = True
+            continue
+
+        in_emoji_sequence = False
+        result.append(char)
+
+    return "".join(result)
+
+
+def strip_discord_markdown(text: str) -> str:
+    text = re.sub(r"```[\s\S]*?```", " код ", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\1", text)
+    text = re.sub(r"(?m)^\s*>>> ?", "", text)
+    text = re.sub(r"(?m)^\s*>\s?", "", text)
+    text = re.sub(r"(?m)^\s*#{1,3}\s+", "", text)
+    text = re.sub(r"(?m)^\s*-#\s+", "", text)
+    text = re.sub(r"(?m)^\s*(?:[-*]|\d+\.)\s+", "", text)
+    text = text.replace("||", "")
+    text = text.replace("~~", "")
+    text = text.replace("__", "")
+    text = text.replace("***", "")
+    text = text.replace("**", "")
+    text = text.replace("*", "")
+    text = text.replace("_", "")
+    return text
+
+
+def get_attachment_tts_labels(message) -> list[str]:
+    labels = []
+
+    for attachment in getattr(message, "attachments", []):
+        content_type = (attachment.content_type or "").lower()
+        filename = (attachment.filename or "").lower()
+        if "gif" in content_type or filename.endswith(".gif"):
+            labels.append("Гифка")
+        elif content_type.startswith("image/"):
+            labels.append("Изображение")
+        elif content_type.startswith("video/"):
+            labels.append("Видео")
+        elif content_type.startswith("audio/"):
+            labels.append("Аудио")
+        else:
+            labels.append("Файл")
+
+    for embed in getattr(message, "embeds", []):
+        embed_type = (getattr(embed, "type", "") or "").lower()
+        if embed_type == "gifv":
+            labels.append("Гифка")
+        elif embed_type in {"image", "video"}:
+            labels.append("Изображение" if embed_type == "image" else "Видео")
+
+    return labels
 
 
 def sanitize_tts_content(content: str) -> str:
     content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", content)
-    content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_mentions)
-    return re.sub(r"<#\d+>", "канал", content_without_emojis).strip()
+    content_without_markdown = strip_discord_markdown(content_without_mentions)
+    content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_markdown)
+    content_with_text_emojis = TEXT_EMOJI_PATTERN.sub("Эмодзи", content_without_emojis)
+    content_with_unicode_emojis = replace_unicode_emojis(content_with_text_emojis)
+    content_without_channels = re.sub(r"<#\d+>", "канал", content_with_unicode_emojis)
+    content_with_gif_labels = GIF_URL_PATTERN.sub("Гифка", content_without_channels)
+    content_with_video_labels = MP4_URL_PATTERN.sub("Видео", content_with_gif_labels)
+    content_without_urls = URL_PATTERN.sub("ссылка", content_with_video_labels)
+    content_with_collapsed_emojis = re.sub(r"(?:Эмодзи\s*){2,}", "Эмодзи ", content_without_urls)
+    return content_with_collapsed_emojis.strip()
+
+
+def sanitize_tts_name(name: str) -> str:
+    sanitized_name = sanitize_tts_content(name)
+    return sanitized_name or "Пользователь"
 
 
 def detect_tts_language(text: str) -> str:
@@ -63,15 +175,39 @@ class Tts(commands.Cog):
         self.is_playing = False
         self.worker_task = None
         self.last_user_message = {}
+        self.pending_disconnects = {}
 
     async def disconnect_if_channel_empty(self, guild):
         voice_client = guild.voice_client
         if voice_client is None or voice_client.channel is None:
             return
 
+        if self.is_playing or not self.message_queue.empty():
+            return
+
         human_members = [member for member in voice_client.channel.members if not member.bot]
-        if not human_members:
-            await voice_client.disconnect(force=True)
+        if human_members:
+            return
+
+        await voice_client.disconnect(force=True)
+
+    async def schedule_disconnect_check(self, guild):
+        guild_id = guild.id
+
+        existing_task = self.pending_disconnects.get(guild_id)
+        if existing_task and not existing_task.done():
+            existing_task.cancel()
+
+        async def delayed_disconnect():
+            try:
+                await asyncio.sleep(EMPTY_CHANNEL_DISCONNECT_DELAY)
+                await self.disconnect_if_channel_empty(guild)
+            except asyncio.CancelledError:
+                return
+            finally:
+                self.pending_disconnects.pop(guild_id, None)
+
+        self.pending_disconnects[guild_id] = self.Bot.loop.create_task(delayed_disconnect())
 
     async def safe_typing_context(self, channel):
         if hasattr(channel, "typing"):
@@ -90,13 +226,12 @@ class Tts(commands.Cog):
         if voice_client is None:
             return
 
-        await asyncio.sleep(1)
-        await self.disconnect_if_channel_empty(member.guild)
+        await self.schedule_disconnect_check(member.guild)
 
     @commands.Cog.listener()
     async def on_message(self, ctx):
         try:
-            if not ctx.guild or ctx.author.bot or not ctx.content:
+            if not ctx.guild or ctx.author.bot:
                 return
 
             server_data = self.servers_data.get(str(ctx.guild.id))
@@ -119,9 +254,12 @@ class Tts(commands.Cog):
             if ctx.channel.id in server_data.get("bannedTTSChannels", []):
                 return
 
-            clean_content = sanitize_tts_content(ctx.content)
-            if not clean_content:
+            clean_content = sanitize_tts_content(ctx.content or "")
+            attachment_labels = get_attachment_tts_labels(ctx)
+            content_parts = [part for part in [clean_content, *attachment_labels] if part]
+            if not content_parts:
                 return
+            clean_content = ". ".join(content_parts)
 
             current_time = discord.utils.utcnow()
             last_message_info = self.last_user_message.get(user.id, {"time": None})
@@ -129,7 +267,7 @@ class Tts(commands.Cog):
             if last_message_info["time"] and (current_time - last_message_info["time"]).total_seconds() < 10:
                 speech = clean_content
             else:
-                speech = f"{user.display_name} пишет: {clean_content}"
+                speech = f"{sanitize_tts_name(user.display_name)} пишет: {clean_content}"
 
             self.last_user_message[user.id] = {"time": current_time}
             await self.message_queue.put((voice_channel, ctx.channel, speech))
@@ -150,6 +288,10 @@ class Tts(commands.Cog):
             voice_client = await channel.connect(timeout=30.0, reconnect=True)
         elif voice_client.channel != channel:
             await voice_client.move_to(channel)
+
+        pending_disconnect = self.pending_disconnects.get(channel.guild.id)
+        if pending_disconnect and not pending_disconnect.done():
+            pending_disconnect.cancel()
 
         for _ in range(20):
             if voice_client.is_connected():
@@ -238,7 +380,7 @@ class Tts(commands.Cog):
                     self.message_queue.task_done()
 
             for guild in self.Bot.guilds:
-                await self.disconnect_if_channel_empty(guild)
+                await self.schedule_disconnect_check(guild)
         finally:
             self.is_playing = False
 
