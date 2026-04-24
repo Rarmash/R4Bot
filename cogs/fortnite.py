@@ -93,6 +93,9 @@ class Fortnite(commands.Cog):
         if status == 404:
             await ctx.respond(f"❗ Игрок **{username}** не найден (ошибка **{status}**).")
             return
+        if status == 503:
+            await ctx.respond("❗ Модуль Fortnite в данный момент перезагружается, обычно это занимает несколько минут. Пожалуйста, подождите...")
+            return
         if status != 200 or not stats_data:
             await ctx.respond(f"❓ Возникла ошибка **{status}**...")
             return
@@ -122,7 +125,7 @@ class Fortnite(commands.Cog):
             try:
                 embed.add_field(
                     name="Владелец профиля",
-                    value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'fortnite', username)}>",
+                    value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'fortnite', stats_data['account']['id'])}>",
                 )
             except IndexError:
                 pass
@@ -164,6 +167,9 @@ class Fortnite(commands.Cog):
         author_id = str(ctx.author.id)
 
         user_id, status = get_fortnite_id(username)
+        if status == 503:
+            await ctx.respond("❗ Модуль Fortnite в данный момент перезагружается, обычно это занимает несколько минут. Пожалуйста, подождите...")
+            return
         if status != 200 or not user_id:
             await ctx.respond(f"При добавлении возникла ошибка **{status}**.\nВозможно, вы неверно указали никнейм.")
             return

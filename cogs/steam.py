@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import discord
@@ -11,6 +12,24 @@ from modules.firebase import get_from_record, search_record_id, update_record
 from options import servers_data
 
 STEAM_API_BASE = "https://api.steampowered.com"
+ENGLISH_MONTHS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+STEAM_COMMUNITY_HEADERS = {
+    "User-Agent": "R4Bot/1.0",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 def get_steam_id(ctx, steamid64, url_or_username=None):
@@ -57,7 +76,7 @@ def resolve_vanity_via_community(vanity: str):
     response = requests.get(
         f"https://steamcommunity.com/id/{vanity}/?xml=1",
         timeout=30,
-        headers={"User-Agent": "R4Bot/1.0"},
+        headers=STEAM_COMMUNITY_HEADERS,
     )
     response.raise_for_status()
 
@@ -103,6 +122,72 @@ def get_player_level(steam_id):
 def normalize_profile_url(summary, steam_id):
     profile_url = summary.get("profileurl")
     return profile_url or (f"https://steamcommunity.com/profiles/{steam_id}" if steam_id else None)
+
+
+def parse_english_date_to_timestamp(member_since: str):
+    date_match = re.fullmatch(r"([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})", member_since)
+    if not date_match:
+        return None
+
+    month_name, day, year = date_match.groups()
+    month = ENGLISH_MONTHS.get(month_name.casefold())
+    if month is None:
+        return None
+
+    try:
+        created_at = datetime(int(year), month, int(day), tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+    return int(created_at.timestamp())
+
+
+def extract_creation_timestamp_from_text(text: str):
+    patterns = [
+        r"<memberSince>\s*([^<]+)\s*</memberSince>",
+        r"Member since[^A-Za-z0-9]+([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+        r"member_since[^A-Za-z0-9]+([A-Za-z]+\s+\d{1,2},\s+\d{4})",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+
+        timestamp = parse_english_date_to_timestamp(match.group(1).strip())
+        if timestamp:
+            return timestamp
+
+    return None
+
+
+def get_profile_creation_timestamp(summary, steam_id):
+    time_created = summary.get("timecreated")
+    if time_created:
+        return time_created
+
+    profile_url = normalize_profile_url(summary, steam_id)
+    if not profile_url:
+        return None
+
+    xml_response = requests.get(
+        f"{profile_url.rstrip('/')}/?xml=1",
+        timeout=30,
+        headers=STEAM_COMMUNITY_HEADERS,
+    )
+    xml_response.raise_for_status()
+
+    timestamp = extract_creation_timestamp_from_text(xml_response.text)
+    if timestamp:
+        return timestamp
+
+    html_response = requests.get(
+        profile_url,
+        timeout=30,
+        headers=STEAM_COMMUNITY_HEADERS,
+    )
+    html_response.raise_for_status()
+    return extract_creation_timestamp_from_text(html_response.text)
 
 
 class Steam(commands.Cog):
@@ -212,17 +297,28 @@ class Steam(commands.Cog):
         embed.add_field(name="SteamID64", value=f"`{steam_id}`")
         embed.set_thumbnail(url=summary.get("avatarfull"))
 
-        time_created = summary.get("timecreated")
-        economy_ban = bans.get("EconomyBan", "none")
         profile_url = normalize_profile_url(summary, steam_id)
+        is_private_profile = summary.get("communityvisibilitystate", 1) != 3
 
-        embed.add_field(name="Аккаунт создан", value=f"<t:{time_created}:D>" if time_created else "Отсутствует")
-        embed.add_field(name="Настоящее имя", value=summary.get("realname") or "Отсутствует")
-        embed.add_field(name="Местоположение", value=summary.get("loccountrycode") or "Отсутствует")
+        economy_ban = bans.get("EconomyBan", "none")
+
         embed.add_field(name="VAC-баны", value="Имеются" if bans.get("NumberOfVACBans", 0) != 0 else "Отсутствуют")
+        embed.add_field(name="Игровые баны", value="Имеются" if bans.get("NumberOfGameBans", 0) != 0 else "Отсутствуют")
         embed.add_field(name="Trade-бан", value="Есть" if str(economy_ban).lower() not in {"none", "0", ""} else "Отсутствует")
-        embed.add_field(name="Лимит на аккаунте ($5)", value="Имеется" if (player_level or 0) == 0 else "Отсутствует")
         embed.add_field(name="Ссылка на профиль", value=f"[Тык]({profile_url})" if profile_url else "Отсутствует")
+
+        if is_private_profile:
+            embed.add_field(name="Статус профиля", value="Приватный")
+        else:
+            try:
+                time_created = get_profile_creation_timestamp(summary, steam_id)
+            except requests.RequestException:
+                time_created = summary.get("timecreated")
+
+            embed.add_field(name="Аккаунт создан", value=f"<t:{time_created}:D>" if time_created else "Отсутствует")
+            embed.add_field(name="Настоящее имя", value=summary.get("realname") or "Отсутствует")
+            embed.add_field(name="Местоположение", value=summary.get("loccountrycode") or "Отсутствует")
+            embed.add_field(name="Лимит на аккаунте ($5)", value="Имеется" if (player_level or 0) == 0 else "Отсутствует")
 
         try:
             embed.add_field(

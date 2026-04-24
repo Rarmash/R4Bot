@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 
 from cogs.fortnite import get_fortnite_username_to_profile
+from cogs.steam import get_player_summary
 from cogs.xbox import get_xbox_gamertag_to_profile
 from modules.firebase import get_from_record
 from options import applicationID, servers_data, version
@@ -109,9 +110,18 @@ class Profile(commands.Cog):
                     nickname = get_fortnite_username_to_profile(user_data["fortnite"])
                     embed.add_field(name="Профиль Fortnite", value=nickname)
                 if "steam" in user_data:
+                    steam_id = str(user_data["steam"])
+                    steam_label = steam_id
+                    try:
+                        steam_summary = get_player_summary(steam_id)
+                        if steam_summary and steam_summary.get("personaname"):
+                            steam_label = steam_summary["personaname"]
+                    except Exception:
+                        pass
+
                     embed.add_field(
                         name="Профиль Steam",
-                        value=f"[Тык](https://steamcommunity.com/profiles/{user_data['steam']})",
+                        value=f"[{steam_label}](https://steamcommunity.com/profiles/{steam_id})",
                     )
 
             if discord.utils.get(ctx.guild.roles, id=server_data.get("insider_id")) in user.roles:
@@ -127,7 +137,7 @@ class Profile(commands.Cog):
             color=int(server_data.get("accent_color"), 16),
         )
         embed.add_field(name="Владелец", value=f"<@{server_data.get('admin_id')}>")
-        embed.add_field(name="Сервер бота", value="RU Xbox Shit Force")
+        embed.add_field(name="Сервер бота", value=ctx.guild.name)
         embed.add_field(name="Создан", value=f"<t:{get_timestamp(user.created_at)}:f>")
         embed.add_field(name="На сервере с", value=f"<t:{get_timestamp(user.joined_at)}:f>")
         embed.add_field(name="Статус", value=status)

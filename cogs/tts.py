@@ -21,6 +21,8 @@ EMPTY_CHANNEL_DISCONNECT_DELAY = 3
 GTTS_GENERATION_TIMEOUT = 20
 PLAYBACK_TIMEOUT = 45
 TTS_MESSAGE_TIMEOUT = 150
+PLAYBACK_START_TIMEOUT = 3
+
 TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
 GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
 MP4_URL_PATTERN = re.compile(r"https?://\S+?\.mp4(?:\?\S*)?|www\.\S+?\.mp4(?:\?\S*)?", re.IGNORECASE)
@@ -52,15 +54,7 @@ def replace_unicode_emojis(text: str) -> str:
     in_emoji_sequence = False
 
     for char in text:
-        if is_emoji_character(char):
-            if not in_emoji_sequence:
-                if result and not result[-1].endswith(" "):
-                    result.append(" ")
-                result.append("Эмодзи")
-                in_emoji_sequence = True
-            continue
-
-        if unicodedata.category(char) == "So":
+        if is_emoji_character(char) or unicodedata.category(char) == "So":
             if not in_emoji_sequence:
                 if result and not result[-1].endswith(" "):
                     result.append(" ")
@@ -93,53 +87,23 @@ def strip_discord_markdown(text: str) -> str:
     return text
 
 
-def get_attachment_tts_labels(message) -> list[str]:
-    labels = []
-
-    for _sticker in getattr(message, "stickers", []):
-        labels.append("Стикер")
-
-    for attachment in getattr(message, "attachments", []):
-        content_type = (attachment.content_type or "").lower()
-        filename = (attachment.filename or "").lower()
-        if "gif" in content_type or filename.endswith(".gif"):
-            labels.append("Гифка")
-        elif content_type.startswith("image/"):
-            labels.append("Изображение")
-        elif content_type.startswith("video/"):
-            labels.append("Видео")
-        elif content_type.startswith("audio/"):
-            labels.append("Аудио")
-        else:
-            labels.append("Файл")
-
-    for embed in getattr(message, "embeds", []):
-        embed_type = (getattr(embed, "type", "") or "").lower()
-        if embed_type == "gifv":
-            labels.append("Гифка")
-        elif embed_type in {"image", "video"}:
-            labels.append("Изображение" if embed_type == "image" else "Видео")
-
-    return labels
-
-
 def sanitize_tts_content(content: str) -> str:
-    content_without_mentions = re.sub(r"<@[!&]?\d+>|<#\d+>", "", content)
-    content_without_markdown = strip_discord_markdown(content_without_mentions)
-    content_without_emojis = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content_without_markdown)
-    content_with_text_emojis = TEXT_EMOJI_PATTERN.sub("Эмодзи", content_without_emojis)
-    content_with_unicode_emojis = replace_unicode_emojis(content_with_text_emojis)
-    content_without_channels = re.sub(r"<#\d+>", "канал", content_with_unicode_emojis)
-    content_with_gif_labels = GIF_URL_PATTERN.sub("Гифка", content_without_channels)
-    content_with_video_labels = MP4_URL_PATTERN.sub("Видео", content_with_gif_labels)
-    content_without_urls = URL_PATTERN.sub("ссылка", content_with_video_labels)
-    content_with_collapsed_emojis = re.sub(r"(?:Эмодзи\s*){2,}", "Эмодзи ", content_without_urls)
-    return content_with_collapsed_emojis.strip()
+    content = re.sub(r"<@[!&]?\d+>", "", content)
+    content = re.sub(r"<#\d+>", "канал", content)
+    content = strip_discord_markdown(content)
+    content = re.sub(r"<a?:\w+:\d+>", "кастомный эмодзи", content)
+    content = TEXT_EMOJI_PATTERN.sub("Эмодзи", content)
+    content = replace_unicode_emojis(content)
+    content = GIF_URL_PATTERN.sub("Гифка", content)
+    content = MP4_URL_PATTERN.sub("Видео", content)
+    content = URL_PATTERN.sub("ссылка", content)
+    content = re.sub(r"(?:Эмодзи\s*){2,}", "Эмодзи ", content)
+    return " ".join(content.split()).strip()
 
 
 def sanitize_tts_name(name: str) -> str:
-    sanitized_name = sanitize_tts_content(name)
-    return sanitized_name or "Пользователь"
+    sanitized = sanitize_tts_content(name)
+    return sanitized or "Пользователь"
 
 
 def detect_tts_language(text: str) -> str:
@@ -150,6 +114,8 @@ def detect_tts_language(text: str) -> str:
 
 def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[str]:
     normalized_text = " ".join(text.split())
+    if not normalized_text:
+        return []
     if len(normalized_text) <= chunk_size:
         return [normalized_text]
 
@@ -190,6 +156,60 @@ def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[st
     return chunks
 
 
+def deduplicate_tts_parts(parts: list[str]) -> list[str]:
+    unique_parts = []
+    seen = set()
+
+    for part in parts:
+        normalized_part = " ".join(str(part).split()).strip()
+        if not normalized_part:
+            continue
+
+        dedupe_key = normalized_part.casefold()
+        if dedupe_key in seen:
+            continue
+
+        seen.add(dedupe_key)
+        unique_parts.append(normalized_part)
+
+    return unique_parts
+
+
+def get_message_tts_parts(message: discord.Message) -> list[str]:
+    parts = []
+
+    clean_content = sanitize_tts_content(message.content or "")
+    if clean_content:
+        parts.append(clean_content)
+
+    for _sticker in getattr(message, "stickers", []):
+        parts.append("Стикер")
+
+    for attachment in getattr(message, "attachments", []):
+        content_type = (attachment.content_type or "").lower()
+        filename = (attachment.filename or "").lower()
+
+        if "gif" in content_type or filename.endswith(".gif"):
+            parts.append("Гифка")
+        elif content_type.startswith("image/"):
+            parts.append("Изображение")
+        elif content_type.startswith("video/"):
+            parts.append("Видео")
+        elif content_type.startswith("audio/"):
+            parts.append("Аудио")
+        else:
+            parts.append("Файл")
+
+    for embed in getattr(message, "embeds", []):
+        embed_type = (getattr(embed, "type", "") or "").lower()
+        if embed_type == "gifv":
+            parts.append("Гифка")
+        elif embed_type in {"image", "video"}:
+            parts.append("Изображение" if embed_type == "image" else "Видео")
+
+    return deduplicate_tts_parts(parts)
+
+
 class Tts(commands.Cog):
     def __init__(self, bot, servers_data):
         self.Bot = bot
@@ -197,7 +217,7 @@ class Tts(commands.Cog):
         self.message_queue = Queue()
         self.is_playing = False
         self.worker_task = None
-        self.last_user_message = {}
+        self.last_announced_author_by_channel = {}
         self.pending_disconnects = {}
         self.current_tts_id = None
         self.skipped_tts_ids = set()
@@ -248,6 +268,49 @@ class Tts(commands.Cog):
             except FileNotFoundError:
                 return
 
+    async def wait_for_playback_start(self, voice_client, playback, timeout: float) -> tuple[bool, object | None]:
+        elapsed = 0.0
+        step = 0.1
+
+        while elapsed < timeout:
+            if voice_client.is_playing():
+                return True, None
+
+            if playback and playback.done():
+                return False, playback.result()
+
+            await asyncio.sleep(step)
+            elapsed += step
+
+        if playback and playback.done():
+            return False, playback.result()
+
+        return False, None
+
+    def build_speech_text(self, message: discord.Message) -> str | None:
+        message_parts = get_message_tts_parts(message)
+        if not message_parts:
+            return None
+
+        base_speech = ". ".join(message_parts)
+        channel_id = message.channel.id
+        previous_author_id = self.last_announced_author_by_channel.get(channel_id)
+        should_include_author = previous_author_id != message.author.id
+        self.last_announced_author_by_channel[channel_id] = message.author.id
+
+        if should_include_author:
+            return f"{sanitize_tts_name(message.author.display_name)} пишет: {base_speech}"
+
+        return base_speech
+
+    async def safe_typing_context(self, channel):
+        if hasattr(channel, "typing"):
+            try:
+                return channel.typing()
+            except Exception:
+                return nullcontext()
+        return nullcontext()
+
     @commands.slash_command(description="Пропустить текущее TTS-сообщение")
     @discord.guild_only()
     async def skiptts(self, ctx: discord.ApplicationContext):
@@ -287,7 +350,6 @@ class Tts(commands.Cog):
 
     async def schedule_disconnect_check(self, guild):
         guild_id = guild.id
-
         existing_task = self.pending_disconnects.get(guild_id)
         if existing_task and not existing_task.done():
             existing_task.cancel()
@@ -302,14 +364,6 @@ class Tts(commands.Cog):
                 self.pending_disconnects.pop(guild_id, None)
 
         self.pending_disconnects[guild_id] = self.Bot.loop.create_task(delayed_disconnect())
-
-    async def safe_typing_context(self, channel):
-        if hasattr(channel, "typing"):
-            try:
-                return channel.typing()
-            except Exception:
-                return nullcontext()
-        return nullcontext()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -328,7 +382,7 @@ class Tts(commands.Cog):
             if not ctx.guild or ctx.author.bot:
                 return
 
-            server_data = self.servers_data.get(str(ctx.guild.id))
+            server_data = self.get_server_data(ctx.guild.id)
             if not server_data:
                 return
 
@@ -348,22 +402,10 @@ class Tts(commands.Cog):
             if ctx.channel.id in server_data.get("bannedTTSChannels", []):
                 return
 
-            clean_content = sanitize_tts_content(ctx.content or "")
-            attachment_labels = get_attachment_tts_labels(ctx)
-            content_parts = [part for part in [clean_content, *attachment_labels] if part]
-            if not content_parts:
+            speech = self.build_speech_text(ctx)
+            if not speech:
                 return
-            clean_content = ". ".join(content_parts)
 
-            current_time = discord.utils.utcnow()
-            last_message_info = self.last_user_message.get(user.id, {"time": None})
-
-            if last_message_info["time"] and (current_time - last_message_info["time"]).total_seconds() < 10:
-                speech = clean_content
-            else:
-                speech = f"{sanitize_tts_name(user.display_name)} пишет: {clean_content}"
-
-            self.last_user_message[user.id] = {"time": current_time}
             await self.message_queue.put((voice_channel, ctx.channel, speech))
 
             if not self.worker_task or self.worker_task.done():
@@ -429,12 +471,18 @@ class Tts(commands.Cog):
                     wait_finish=True,
                 )
 
-                await asyncio.sleep(0.75)
-                if not voice_client.is_playing():
+                started, early_error = await self.wait_for_playback_start(
+                    voice_client,
+                    playback,
+                    timeout=PLAYBACK_START_TIMEOUT,
+                )
+                if not started:
+                    if early_error:
+                        raise early_error
+
                     if playback and playback.done():
-                        error = playback.result()
-                        if error:
-                            raise error
+                        playback_started = True
+                        break
 
                     raise RuntimeError("Voice playback did not start.")
 
@@ -449,12 +497,14 @@ class Tts(commands.Cog):
                 last_error = TimeoutError("TTS playback timed out.")
                 if voice_client.is_playing():
                     voice_client.stop()
-                await self.reset_voice_client(voice_channel.guild)
+                if attempt == 2:
+                    await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 timed out.")
                 await asyncio.sleep(1)
             except Exception as playback_error:
                 last_error = playback_error
-                await self.reset_voice_client(voice_channel.guild)
+                if attempt == 2:
+                    await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 failed: {playback_error}")
                 await asyncio.sleep(1)
 
@@ -481,12 +531,11 @@ class Tts(commands.Cog):
         return None
 
     async def process_speech_chunks(self, voice_channel, source_channel, speech: str, tts_id: int):
-        language = detect_tts_language(speech)
         chunks = split_tts_text(speech)
-        voice_client = await self.ensure_voice_client(voice_channel)
-
         if not chunks:
             return
+
+        language = detect_tts_language(speech)
 
         typing_context = await self.safe_typing_context(source_channel)
         async with typing_context:
@@ -519,7 +568,6 @@ class Tts(commands.Cog):
             return
 
         self.is_playing = True
-
         try:
             while not self.message_queue.empty():
                 try:

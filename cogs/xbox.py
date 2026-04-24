@@ -88,7 +88,7 @@ class Xbox(commands.Cog):
             try:
                 embed.add_field(
                     name="Владелец профиля",
-                    value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'xbox', gamertag)}>",
+                    value=f"<@{search_record_id(str(ctx.guild.id), 'Users', 'xbox', str(gamer_info.xuid))}>",
                 )
             except IndexError:
                 pass
