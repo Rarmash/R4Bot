@@ -269,7 +269,7 @@ class Steam(commands.Cog):
 
         steamid64 = get_steam_id(ctx, steamid64, url_or_username)
         if not steamid64 and not url_or_username:
-            await ctx.respond("Ты не привязал профиль Steam к учётной записи Discord. Сделай это командой `/steam connect`.")
+            await ctx.respond("Вы не привязали профиль Steam к учётной записи Discord. Сделайте это, используя команду `/steam connect`!")
             return
 
         try:
@@ -357,7 +357,7 @@ class Steam(commands.Cog):
 
         update_record(str(ctx.guild.id), "Users", author_id, {"steam": str(steam_id)})
         embed = discord.Embed(
-            description=f"Аккаунт **{summary.get('personaname', 'Неизвестный пользователь')}** был успешно привязан к твоей учётной записи!",
+            description=f"Аккаунт **{summary.get('personaname', 'Неизвестный пользователь')}** был успешно привязан к Вашей учётной записи!",
             color=int(server_data.get("accent_color"), 16),
         )
         embed.set_thumbnail(url=summary.get("avatarfull"))
