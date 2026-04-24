@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 
+from modules.server_config import respond_missing_server_config
 from options import servers_data
 
 
@@ -19,6 +20,7 @@ class Suggest(commands.Cog):
     async def suggest(self, ctx: discord.ApplicationContext, suggestion: str, duration: int):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         suggest_accept = discord.PollAnswer(text="За")

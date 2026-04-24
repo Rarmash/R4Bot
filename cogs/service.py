@@ -8,6 +8,7 @@ import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
 
+from modules.server_config import initialize_server_config, respond_missing_server_config
 from options import servers_data
 
 
@@ -52,6 +53,14 @@ class Service(commands.Cog):
     def get_server_data(self, guild_id: int):
         return self.servers_data.get(str(guild_id))
 
+    async def get_server_data_or_notify(self, ctx):
+        server_data = self.get_server_data(ctx.guild.id)
+        if server_data:
+            return server_data
+
+        await respond_missing_server_config(ctx)
+        return None
+
     async def deny_if_not_admin(self, ctx, server_data) -> bool:
         if ctx.author.id == server_data.get("admin_id"):
             return False
@@ -59,10 +68,46 @@ class Service(commands.Cog):
         await ctx.respond("Недостаточно прав для выполнения данной команды.")
         return True
 
+    @service.command(description="Создать минимальный конфиг для сервера")
+    @discord.option("overwrite", description="Перезаписать уже существующий конфиг", default=False, required=False)
+    @discord.guild_only()
+    async def initserver(self, ctx, overwrite: bool = False):
+        existing_server_data = self.get_server_data(ctx.guild.id)
+        has_access = ctx.author.id == ctx.guild.owner_id
+        if existing_server_data and ctx.author.id == existing_server_data.get("admin_id"):
+            has_access = True
+
+        if not has_access:
+            await ctx.respond(
+                "Инициализировать конфиг сервера может только владелец сервера или админ бота для этого сервера.",
+                ephemeral=True,
+            )
+            return
+
+        if existing_server_data and not overwrite:
+            await ctx.respond(
+                "Для этого сервера конфиг уже существует. Если нужно пересоздать его, укажи `overwrite: true`.",
+                ephemeral=True,
+            )
+            return
+
+        config, created = initialize_server_config(
+            guild_id=ctx.guild.id,
+            admin_id=ctx.guild.owner_id,
+            overwrite=overwrite,
+        )
+        self.servers_data[str(ctx.guild.id)] = config
+
+        status = "создан" if created else "обновлён"
+        await ctx.respond(
+            f"Минимальный конфиг сервера {status}. Теперь можно донастроить `servers.json` под каналы, роли и ID.",
+            ephemeral=True,
+        )
+
     @commands.slash_command(description="Посмотреть карточку сервера")
     @discord.guild_only()
     async def server(self, ctx):
-        server_data = self.get_server_data(ctx.guild.id)
+        server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
 
@@ -87,7 +132,7 @@ class Service(commands.Cog):
 
     @service.command(description="Отправить .env и servers.json")
     async def secrets(self, ctx):
-        server_data = self.get_server_data(ctx.guild.id)
+        server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
 
@@ -115,7 +160,7 @@ class Service(commands.Cog):
 
     @service.command(description="Выключить бота")
     async def shutdown(self, ctx):
-        server_data = self.get_server_data(ctx.guild.id)
+        server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
 
@@ -128,7 +173,7 @@ class Service(commands.Cog):
     @service.command(description="Выгрузить модуль")
     @discord.option("cog", description="Название модуля")
     async def unload(self, ctx, cog: str):
-        server_data = self.get_server_data(ctx.guild.id)
+        server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
 
@@ -141,7 +186,7 @@ class Service(commands.Cog):
     @service.command(description="Загрузить модуль")
     @discord.option("cog", description="Название модуля")
     async def load(self, ctx, cog: str):
-        server_data = self.get_server_data(ctx.guild.id)
+        server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
 
@@ -154,7 +199,7 @@ class Service(commands.Cog):
     @service.command(description="Перезагрузить модуль")
     @discord.option("cog", description="Название модуля")
     async def reload(self, ctx, cog: str):
-        server_data = self.get_server_data(ctx.guild.id)
+        server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
 

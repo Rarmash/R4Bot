@@ -9,6 +9,7 @@ from discord.ext import commands
 
 import options
 from modules.firebase import get_from_record, search_record_id, update_record
+from modules.server_config import respond_missing_server_config
 from options import servers_data
 
 STEAM_API_BASE = "https://api.steampowered.com"
@@ -217,6 +218,7 @@ class Steam(commands.Cog):
     async def price(self, ctx: discord.ApplicationContext, appid: int, countrycode: str):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         steam_url = f"https://store.steampowered.com/api/appdetails?appids={appid}&cc={countrycode}&l=ru"
@@ -263,6 +265,7 @@ class Steam(commands.Cog):
     async def profile(self, ctx: discord.ApplicationContext, steamid64: str, url_or_username: str):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()
@@ -336,6 +339,7 @@ class Steam(commands.Cog):
     async def connect(self, ctx: discord.ApplicationContext, steamid64: str, url_or_username: str):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()

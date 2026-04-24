@@ -5,6 +5,7 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
+from modules.server_config import respond_missing_server_config
 from options import servers_data
 
 
@@ -20,7 +21,8 @@ class TicketButtons(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool | None:
         server_data = self.get_server_data(interaction.guild.id)
         if not server_data:
-            return
+            await respond_missing_server_config(interaction)
+            return False
 
         if interaction.user.id == interaction.guild.owner_id:
             return True
@@ -55,6 +57,7 @@ class TicketButtons(discord.ui.View):
     async def close_button_callback(self, button, interaction):
         server_data = self.get_server_data(interaction.guild.id)
         if not server_data:
+            await respond_missing_server_config(interaction)
             return
 
         self.disable_all_items()
@@ -94,6 +97,7 @@ class Support(commands.Cog):
     async def ticket(self, ctx, text: str):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         embed = discord.Embed(

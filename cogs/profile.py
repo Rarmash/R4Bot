@@ -11,6 +11,7 @@ from cogs.fortnite import get_fortnite_username_to_profile
 from cogs.steam import get_player_summary
 from cogs.xbox import get_xbox_gamertag_to_profile
 from modules.firebase import get_from_record
+from modules.server_config import respond_missing_server_config
 from options import applicationID, servers_data, version
 
 DATE_FORMAT = "%#d.%#m.%Y в %H:%M:%S"
@@ -77,6 +78,7 @@ class Profile(commands.Cog):
     async def profile(self, ctx: discord.ApplicationContext, user: discord.Member = None):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         user = user or ctx.author
@@ -151,3 +153,4 @@ class Profile(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Profile(bot, servers_data))
+

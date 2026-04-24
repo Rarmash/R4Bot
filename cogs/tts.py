@@ -10,6 +10,7 @@ import discord
 from discord.ext import commands
 from gtts import gTTS
 
+from modules.server_config import respond_missing_server_config
 from options import servers_data
 
 FFMPEG_OPTIONS = {
@@ -316,6 +317,7 @@ class Tts(commands.Cog):
     async def skiptts(self, ctx: discord.ApplicationContext):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         if not self.can_skip_tts(ctx, server_data):

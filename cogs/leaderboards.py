@@ -5,6 +5,7 @@ from discord.commands import SlashCommandGroup
 from discord.ext import commands
 
 from modules.firebase import filter_records_by_quantity, get_all_records
+from modules.server_config import respond_missing_server_config
 from options import servers_data
 
 
@@ -48,6 +49,7 @@ class Leaderboards(commands.Cog):
     async def timeouts(self, ctx):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         users = get_all_records(str(ctx.guild.id), "Users")
@@ -72,6 +74,7 @@ class Leaderboards(commands.Cog):
     async def messages(self, ctx):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         users = json.loads(filter_records_by_quantity(str(ctx.guild.id), "Users", "messages", 1))
@@ -108,6 +111,7 @@ class Leaderboards(commands.Cog):
     async def voice(self, ctx):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         users = get_all_records(str(ctx.guild.id), "Users") or {}

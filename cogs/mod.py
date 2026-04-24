@@ -4,6 +4,7 @@ import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
 
+from modules.server_config import respond_missing_server_config
 from options import servers_data
 
 
@@ -20,6 +21,7 @@ class Mod(commands.Cog):
     async def ban(self, ctx, member: discord.Member, reason=None):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()
@@ -49,6 +51,7 @@ class Mod(commands.Cog):
     async def banid(self, ctx, identificator, reason):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()
@@ -73,6 +76,7 @@ class Mod(commands.Cog):
     async def kick(self, ctx, member: discord.Member, reason):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()
@@ -105,6 +109,7 @@ class Mod(commands.Cog):
     ):
         server_data = self.servers_data.get(str(ctx.guild.id))
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()

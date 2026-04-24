@@ -4,6 +4,7 @@ from discord.commands import SlashCommandGroup
 from discord.ext import commands
 
 from modules.firebase import get_from_record, search_record_id, update_record
+from modules.server_config import respond_missing_server_config
 from options import fortniteapi, servers_data
 
 FORTNITE_API_BASE = "https://fortnite-api.com"
@@ -64,6 +65,7 @@ class Fortnite(commands.Cog):
     async def stats(self, ctx: discord.ApplicationContext, username: str):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()
@@ -138,6 +140,7 @@ class Fortnite(commands.Cog):
     async def map(self, ctx: discord.ApplicationContext):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         try:
@@ -161,6 +164,7 @@ class Fortnite(commands.Cog):
     async def connect(self, ctx: discord.ApplicationContext, username: str):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
+            await respond_missing_server_config(ctx)
             return
 
         await ctx.defer()
