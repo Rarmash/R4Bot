@@ -18,6 +18,7 @@ class ProjectPaths:
     firebase_config: Path
     servers_config: Path
     module_configs_dir: Path
+    secrets_dir: Path
     installed_modules_dir: Path
     module_state_file: Path
 
@@ -31,6 +32,7 @@ class ProjectPaths:
             firebase_config=project_root / "firebaseConfig.json",
             servers_config=project_root / "servers.json",
             module_configs_dir=project_root / "config" / "modules",
+            secrets_dir=project_root / "config" / "secrets",
             installed_modules_dir=project_root / "installed_modules",
             module_state_file=project_root / "data" / "module_state.json",
         )

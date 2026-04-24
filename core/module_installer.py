@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import stat
 import shutil
-import tempfile
+import uuid
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -101,10 +101,11 @@ class ModuleInstaller:
         requested_module_id: str | None,
     ) -> ModuleManifest:
         self.config.paths.temp_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="r4bot-module-", dir=self.config.paths.temp_dir) as temp_dir_raw:
-            temp_dir = Path(temp_dir_raw)
-            archive_path = temp_dir / "module.zip"
-            extracted_dir = temp_dir / "extracted"
+        temp_dir = self.config.paths.temp_dir / f"r4bot-module-{uuid.uuid4().hex}"
+        archive_path = temp_dir / "module.zip"
+        extracted_dir = temp_dir / "extracted"
+
+        try:
             extracted_dir.mkdir(parents=True, exist_ok=True)
 
             self._download_archive(repo, ref, archive_path)
@@ -123,6 +124,8 @@ class ModuleInstaller:
                 },
                 requested_module_id=requested_module_id,
             )
+        finally:
+            self._cleanup_directory(temp_dir)
 
     def _install_from_directory(self, source_dir: Path, enable: bool, source: str) -> ModuleManifest:
         if not source_dir.exists():
@@ -164,6 +167,7 @@ class ModuleInstaller:
 
         shutil.copytree(source_root, target_dir, ignore=shutil.ignore_patterns(".git", ".idea", "__pycache__"))
         self._ensure_module_config(target_dir, manifest.module_id)
+        self._ensure_module_secrets(target_dir, manifest.module_id)
         self.state_store.set_module(
             manifest.module_id,
             {
@@ -198,6 +202,27 @@ class ModuleInstaller:
             shutil.copyfile(example_path, target_config_path)
             return
 
+    def _ensure_module_secrets(self, source_root: Path, module_id: str):
+        secrets_dir = self.config.paths.secrets_dir
+        secrets_dir.mkdir(parents=True, exist_ok=True)
+
+        target_secret_path = secrets_dir / f"{module_id}.json"
+        if target_secret_path.exists():
+            return
+
+        candidate_names = [
+            f"{module_id}.secrets.example.json",
+            "secrets.example.json",
+        ]
+
+        for candidate_name in candidate_names:
+            example_path = source_root / candidate_name
+            if not example_path.exists():
+                continue
+
+            shutil.copyfile(example_path, target_secret_path)
+            return
+
     def _download_archive(self, repo: str, ref: str, destination: Path):
         candidate_urls = [
             f"https://github.com/{repo}/archive/refs/tags/{ref}.zip",
@@ -222,6 +247,10 @@ class ModuleInstaller:
             raise ModuleInstallerError("Downloaded module does not contain module.json")
         manifests.sort(key=lambda path: len(path.parts))
         return manifests[0]
+
+    def _cleanup_directory(self, path: Path):
+        if path.exists():
+            shutil.rmtree(path, onexc=self._handle_remove_readonly)
 
     @staticmethod
     def _handle_remove_readonly(func, path, excinfo):

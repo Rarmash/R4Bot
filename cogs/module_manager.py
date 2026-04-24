@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import discord
 from discord.commands import SlashCommandGroup
 from discord.ext import commands
@@ -43,20 +41,31 @@ class ModuleManager(commands.Cog):
     def get_manifest_path(self, module_id: str):
         return self.config.paths.installed_modules_dir / module_id / "module.json"
 
-    def get_module_manifest(self, module_id: str) -> ModuleManifest | None:
+    def get_module_manifest(self, module_id: str):
         manifest_path = self.get_manifest_path(module_id)
         if not manifest_path.exists():
             return None
         return ModuleManifest.from_file(manifest_path)
 
-    def get_extension_path(self, module_id: str) -> str | None:
+    def get_extension_path(self, module_id: str):
         manifest = self.get_module_manifest(module_id)
         if manifest is None:
             return None
         return manifest.to_import_path()
 
-    def get_installed_module(self, module_id: str) -> dict | None:
+    def get_installed_module(self, module_id: str):
         return self.state_store.list_installed().get(module_id)
+
+    @staticmethod
+    def build_source_label(module_data: dict) -> str:
+        source = module_data.get("source", "unknown")
+        if source == "github" and module_data.get("repo"):
+            repo = module_data["repo"]
+            ref = module_data.get("ref", "main")
+            return f"[{repo}@{ref}](https://github.com/{repo})"
+        if source == "path" and module_data.get("path"):
+            return f"`path` `{module_data['path']}`"
+        return f"`{source}`"
 
     @module.command(description="Посмотреть список установленных модулей")
     @discord.guild_only()
@@ -78,19 +87,22 @@ class ModuleManager(commands.Cog):
         for module_id, data in sorted(installed.items()):
             status = "включён" if data.get("enabled") else "выключен"
             version = data.get("version", "?")
-            source = data.get("source", "unknown")
             embed.add_field(
                 name=f"{data.get('name', module_id)} ({module_id})",
-                value=f"Версия: `{version}`\nСтатус: `{status}`\nИсточник: `{source}`",
+                value=(
+                    f"Версия: `{version}`\n"
+                    f"Статус: `{status}`\n"
+                    f"Источник: {self.build_source_label(data)}"
+                ),
                 inline=False,
             )
 
         await ctx.respond(embed=embed, ephemeral=True)
 
     @module.command(description="Посмотреть информацию об установленном модуле")
-    @discord.option("module_id", description="ID модуля")
+    @discord.option("module_id", str, description="ID модуля")
     @discord.guild_only()
-    async def info(self, ctx, module_id: str):
+    async def info(self, ctx, module_id):
         server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
@@ -108,29 +120,23 @@ class ModuleManager(commands.Cog):
         embed.add_field(name="ID", value=f"`{module_id}`")
         embed.add_field(name="Версия", value=f"`{module_data.get('version', '?')}`")
         embed.add_field(name="Статус", value="Включён" if module_data.get("enabled") else "Выключен")
-        embed.add_field(name="Источник", value=f"`{module_data.get('source', 'unknown')}`")
+        embed.add_field(name="Источник", value=self.build_source_label(module_data), inline=False)
 
         if manifest is not None:
             embed.add_field(name="Entrypoint", value=f"`{manifest.entrypoint}`", inline=False)
             embed.add_field(name="Автор", value=manifest.author or "Не указан")
             embed.add_field(name="Min core", value=manifest.min_core_version or "Не указана")
-            embed.add_field(
-                name="Описание",
-                value=manifest.description or "Отсутствует",
-                inline=False,
-            )
+            embed.add_field(name="Описание", value=manifest.description or "Отсутствует", inline=False)
 
-        if module_data.get("repo"):
-            embed.add_field(name="GitHub", value=f"`{module_data['repo']}@{module_data.get('ref', 'main')}`", inline=False)
         if module_data.get("path"):
             embed.add_field(name="Путь", value=f"`{module_data['path']}`", inline=False)
 
         await ctx.respond(embed=embed, ephemeral=True)
 
     @module.command(description="Включить установленный модуль")
-    @discord.option("module_id", description="ID модуля")
+    @discord.option("module_id", str, description="ID модуля")
     @discord.guild_only()
-    async def enable(self, ctx, module_id: str):
+    async def enable(self, ctx, module_id):
         server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
@@ -161,9 +167,9 @@ class ModuleManager(commands.Cog):
         await ctx.respond(f"Модуль `{module_id}` включён.", ephemeral=True)
 
     @module.command(description="Выключить установленный модуль")
-    @discord.option("module_id", description="ID модуля")
+    @discord.option("module_id", str, description="ID модуля")
     @discord.guild_only()
-    async def disable(self, ctx, module_id: str):
+    async def disable(self, ctx, module_id):
         server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return
@@ -190,9 +196,9 @@ class ModuleManager(commands.Cog):
         await ctx.respond(f"Модуль `{module_id}` выключен.", ephemeral=True)
 
     @module.command(description="Перезагрузить установленный модуль")
-    @discord.option("module_id", description="ID модуля")
+    @discord.option("module_id", str, description="ID модуля")
     @discord.guild_only()
-    async def reload(self, ctx, module_id: str):
+    async def reload(self, ctx, module_id):
         server_data = await self.get_server_data_or_notify(ctx)
         if not server_data:
             return

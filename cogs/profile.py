@@ -5,16 +5,20 @@ import time
 from math import ceil
 
 import discord
+import requests
 from discord.ext import commands
+from xpa import ErrorHandler as XboxErrorHandler
+from xpa import XPA
 
-from cogs.fortnite import get_fortnite_username_to_profile
 from cogs.steam import get_player_summary
-from cogs.xbox import get_xbox_gamertag_to_profile
 from modules.firebase import get_from_record
 from modules.server_config import respond_missing_server_config
 from options import applicationID, servers_data, version
+from services.secret_service import SecretService
 
 DATE_FORMAT = "%#d.%#m.%Y в %H:%M:%S"
+FORTNITE_API_BASE = "https://fortnite-api.com"
+_xbox_client = None
 
 
 class BotLink(discord.ui.View):
@@ -65,6 +69,54 @@ def format_voice_duration(total_seconds):
     return f"{seconds} с"
 
 
+def get_xbox_client():
+    global _xbox_client
+    if _xbox_client is not None:
+        return _xbox_client
+
+    api_key = SecretService().get("xbox", "api_key")
+    if not api_key:
+        return None
+
+    _xbox_client = XPA(api_key)
+    return _xbox_client
+
+
+def get_xbox_gamertag_to_profile(xuid):
+    xbox_client = get_xbox_client()
+    if xbox_client is None:
+        return str(xuid)
+
+    try:
+        return xbox_client.get_account_info_xuid(xuid).Gamertag
+    except XboxErrorHandler.XboxApiError:
+        return str(xuid)
+
+
+def get_fortnite_headers():
+    api_key = SecretService().get("fortnite", "api_key")
+    if not api_key:
+        return None
+    return {"Authorization": api_key}
+
+
+def get_fortnite_username_to_profile(account_id):
+    headers = get_fortnite_headers()
+    if headers is None:
+        return str(account_id)
+
+    try:
+        response = requests.get(
+            f"{FORTNITE_API_BASE}/v2/stats/br/v2/{account_id}",
+            headers=headers,
+            timeout=30,
+        )
+        payload = response.json()
+        return (payload.get("data") or {}).get("account", {}).get("name") or str(account_id)
+    except requests.RequestException:
+        return str(account_id)
+
+
 class Profile(commands.Cog):
     def __init__(self, bot, servers_data):
         self.bot = bot
@@ -88,10 +140,10 @@ class Profile(commands.Cog):
         user_data = get_from_record(str(ctx.guild.id), "Users", str(user.id))
 
         if user.id != self.bot.user.id:
-            time_out = "(в тайм-ауте)" if user.timed_out else ""
+            timeout_suffix = "(в тайм-ауте)" if user.timed_out else ""
             embed = discord.Embed(
                 title=f"Привет, я {user.name}",
-                description=f"<@{user.id}> — {status} {time_out}",
+                description=f"<@{user.id}> — {status} {timeout_suffix}".strip(),
                 color=int(server_data.get("accent_color"), 16),
             )
             embed.add_field(name="Регистрация", value=f"<t:{get_timestamp(user.created_at)}:f>")
@@ -126,7 +178,8 @@ class Profile(commands.Cog):
                         value=f"[{steam_label}](https://steamcommunity.com/profiles/{steam_id})",
                     )
 
-            if discord.utils.get(ctx.guild.roles, id=server_data.get("insider_id")) in user.roles:
+            insider_role = discord.utils.get(ctx.guild.roles, id=server_data.get("insider_id"))
+            if insider_role in user.roles:
                 embed.set_footer(text="Принимает участие в тестировании и помогает серверу стать лучше")
 
             embed.set_thumbnail(url=user.avatar)
@@ -153,4 +206,3 @@ class Profile(commands.Cog):
 
 def setup(bot):
     bot.add_cog(Profile(bot, servers_data))
-

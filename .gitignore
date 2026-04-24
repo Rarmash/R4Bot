@@ -13,5 +13,6 @@ speech.mp3
 .venv
 venv
 !config/modules/*.example.json
+!config/secrets/*.example.json
 installed_modules/*
 !installed_modules/__init__.py
