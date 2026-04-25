@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from options import version
+from core.version import VERSION
 
 
 @dataclass(frozen=True)
@@ -43,12 +43,9 @@ class ConfigService:
         self.paths = paths or ProjectPaths.discover()
         load_dotenv(self.paths.env_file)
 
-        self.version = version
+        self.version = VERSION
         self.token = environ.get("TOKEN")
         self.application_id = environ.get("APPLICATIONID")
-        self.fortnite_api = environ.get("FORTNITEAPI")
-        self.xbox_api = environ.get("XBOXAPI")
-        self.steam_api = environ.get("STEAMAPI")
         self.debug_mode = environ.get("DEBUGMODE") == "ON"
 
         self.firebase_project_id = self._read_firebase_project_id()

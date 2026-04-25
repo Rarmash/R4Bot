@@ -6,7 +6,6 @@ from core.module_loader import ModuleLoader
 from core.runtime_context import RuntimeContext, RuntimeServices
 from modules.firebase import create_firebase_app
 from modules.versionChecker import VersionChecker
-from options import debugmode, firebase_id, token, version
 from services.config_service import ConfigService
 from services.firebase_service import FirebaseService
 from services.module_config_service import ModuleConfigService
@@ -15,8 +14,11 @@ from services.module_state_service import ModuleStateService
 from services.profile_extension_service import ProfileExtensionService
 from services.secret_service import SecretService
 
-create_firebase_app(firebase_id)
+
 config_service = ConfigService()
+if config_service.firebase_project_id:
+    create_firebase_app(config_service.firebase_project_id)
+
 runtime_services = RuntimeServices(
     config=config_service,
     firebase=FirebaseService(),
@@ -49,15 +51,14 @@ async def on_ready():
     print("------")
     print(f"Текущее время: {datetime.now()}")
     print(f"{bot.user.name} запущен!")
-    print(f"Версия: {version}")
+    print(f"Версия: {config_service.version}")
     print(f"ID бота: {bot.user.id}")
     for guild in bot.guilds:
         print(f"Подключились к серверу: {guild}")
     print("------")
 
-    is_debug = debugmode == "ON"
-    status = discord.Status.dnd if is_debug else discord.Status.online
-    status_text = f"v{version} debug" if is_debug else f"v{version}"
+    status = discord.Status.dnd if config_service.debug_mode else discord.Status.online
+    status_text = f"v{config_service.version} debug" if config_service.debug_mode else f"v{config_service.version}"
     activity = discord.CustomActivity(name=status_text)
     await bot.change_presence(status=status, activity=activity)
 
@@ -71,4 +72,4 @@ module_loader.load_enabled_modules()
 
 
 if __name__ == "__main__":
-    bot.run(token)
+    bot.run(config_service.token)

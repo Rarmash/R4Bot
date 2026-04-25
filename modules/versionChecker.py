@@ -9,7 +9,7 @@ from pathlib import Path
 import aiohttp
 from discord.ext import commands, tasks
 
-from options import servers_data, version
+from services.config_service import ConfigService
 
 
 async def git_pull():
@@ -38,9 +38,9 @@ def restart_bot():
 class VersionChecker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.current_version = version
+        self.config = getattr(bot, "r4_services", None).config if hasattr(bot, "r4_services") else ConfigService()
+        self.current_version = self.config.version
         self.repo = "Rarmash/R4Bot"
-        self.servers_data = servers_data
         self.session = None
         self.check_version.start()
 
