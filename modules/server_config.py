@@ -12,28 +12,16 @@ DEFAULT_ACCENT_COLOR = "0x209af8"
 
 DEFAULT_SERVER_CONFIG = {
     "accent_color": DEFAULT_ACCENT_COLOR,
-    "log_channel": 0,
-    "admin_channel": 0,
-    "ticket_category": 0,
-    "suggestions_channel": 0,
-    "media_channel": 0,
-    "media_pins": 1,
     "admin_id": 0,
     "mod_role_id": 0,
     "insider_id": 0,
     "admin_role_id": 0,
-    "trash_channels": [],
-    "bannedChannels": [],
-    "bannedUsers": [],
-    "bannedCategories": [],
-    "bannedTTSChannels": [],
-    "banned_TTS_role": 0,
 }
 
 
 def build_default_servers_payload() -> dict:
     return {
-        "cogs": ["events", "module_manager"],
+        "cogs": ["events", "service"],
         "server_id": deepcopy(DEFAULT_SERVER_CONFIG),
     }
 

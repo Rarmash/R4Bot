@@ -93,6 +93,21 @@ class ModuleInstaller:
             f"Module '{module_id}' has unsupported update source '{source}'. Reinstall it manually."
         )
 
+    def update_all(self, ref: str | None = None) -> tuple[list[tuple[str, ModuleManifest]], dict[str, str]]:
+        updated: list[tuple[str, ModuleManifest]] = []
+        failed: dict[str, str] = {}
+
+        for module_id in self.state_store.list_installed():
+            try:
+                manifest = self.update(module_id, ref=ref)
+            except (ModuleInstallerError, KeyError) as exc:
+                failed[module_id] = str(exc)
+                continue
+
+            updated.append((module_id, manifest))
+
+        return updated, failed
+
     def _install_from_github(
         self,
         repo: str,

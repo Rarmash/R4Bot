@@ -19,7 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     remove_parser.add_argument("module_id")
 
     update_parser = subparsers.add_parser("update", help="Update an installed module from its original source")
-    update_parser.add_argument("module_id")
+    update_parser.add_argument("module_id", nargs="?", help="Installed module id")
+    update_parser.add_argument("--all", action="store_true", help="Update all installed modules")
     update_parser.add_argument("--ref", help="Override Git ref for GitHub-based modules")
 
     enable_parser = subparsers.add_parser("enable", help="Enable an installed module")
@@ -52,6 +53,28 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "update":
+            if args.all:
+                updated, failed = installer.update_all(ref=args.ref)
+
+                if updated:
+                    print("Updated modules:")
+                    for module_id, manifest in updated:
+                        print(f"- {module_id}: {manifest.version}")
+
+                if failed:
+                    print("Failed modules:")
+                    for module_id, error in failed.items():
+                        print(f"- {module_id}: {error}")
+
+                if not updated and not failed:
+                    print("No modules installed.")
+                    return 0
+
+                return 0 if not failed else 1
+
+            if not args.module_id:
+                raise ModuleInstallerError("Specify a module id or use --all.")
+
             manifest = installer.update(args.module_id, ref=args.ref)
             print(f"Module '{manifest.name}' ({manifest.module_id} {manifest.version}) updated.")
             return 0
