@@ -6,6 +6,13 @@ from core.module_installer import ModuleInstaller, ModuleInstallerError
 from services.config_service import ConfigService
 
 
+def print_runtime_change_warning():
+    print(
+        "Warning: module install/update changes files and Python dependencies. "
+        "It is safer to run these commands while the bot is stopped, then restart it."
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="R4Bot module manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -42,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "install":
+            print_runtime_change_warning()
             manifest = installer.install(args.module_ref, ref=args.ref, enable=args.enable)
             state = "enabled" if args.enable else "installed"
             print(f"Module '{manifest.name}' ({manifest.module_id} {manifest.version}) {state}.")
@@ -53,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "update":
+            print_runtime_change_warning()
             if args.all:
                 updated, failed = installer.update_all(ref=args.ref)
 

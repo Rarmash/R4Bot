@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 import shutil
+import sys
 import uuid
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -181,6 +183,12 @@ class ModuleInstaller:
             shutil.rmtree(target_dir, onexc=self._handle_remove_readonly)
 
         shutil.copytree(source_root, target_dir, ignore=shutil.ignore_patterns(".git", ".idea", "__pycache__"))
+        try:
+            self._install_module_requirements(target_dir)
+        except ModuleInstallerError:
+            if target_dir.exists():
+                shutil.rmtree(target_dir, onexc=self._handle_remove_readonly)
+            raise
         self._ensure_module_config(target_dir, manifest.module_id)
         self._ensure_module_secrets(target_dir, manifest.module_id)
         self.state_store.set_module(
@@ -237,6 +245,21 @@ class ModuleInstaller:
 
             shutil.copyfile(example_path, target_secret_path)
             return
+
+    def _install_module_requirements(self, source_root: Path):
+        requirements_path = source_root / "requirements.txt"
+        if not requirements_path.exists():
+            return
+
+        command = [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            return
+
+        error_output = (result.stderr or result.stdout).strip()
+        if not error_output:
+            error_output = "Unknown pip error."
+        raise ModuleInstallerError(f"Failed to install module dependencies from {requirements_path}: {error_output}")
 
     def _download_archive(self, repo: str, ref: str, destination: Path):
         candidate_urls = [

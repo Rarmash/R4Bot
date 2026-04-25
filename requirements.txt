@@ -2,9 +2,6 @@
 py-cord[voice] @ git+https://github.com/Pycord-Development/pycord.git
 python-dotenv>=1.2.2
 dnspython==2.6.1
-requests>=2.33.1,<3
-gtts==2.5.1
-xbox-python-api==0.2.2
 firebase==4.0.1
 firebase-admin==6.5.0
 aiohttp==3.13.5
