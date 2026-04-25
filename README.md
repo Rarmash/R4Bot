@@ -4,26 +4,9 @@ R4Bot — это модульное ядро Discord-бота. Этот репо
 
 ## Что входит в R4Bot
 
-### Встроенные модули ядра
-- `events`
-- `service`
-
-### Поддерживаемые внешние модули
-- `logger`
-- `suggestions`
-- `starboard`
-- `messages`
-- `rolesback`
-- `leaderboards`
-- `voice`
-- `timeouts`
-- `xbox`
-- `fortnite`
-- `steam`
-- `mod`
-- `profile`
-- `tts`
-- `tickets`
+R4Bot состоит из двух частей:
+- ядро, которое отвечает за runtime, конфиги, загрузку модулей и административную основу
+- внешние модули, которые подключают пользовательский функционал
 
 ## Как устроен runtime
 
