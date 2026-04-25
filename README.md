@@ -224,10 +224,6 @@ python manage_modules.py remove logger
 - `/service disablemodule`
 - `/service reloadmodule`
 
-Модуль профиля предоставляет:
-- `/profile`
-- `/server`
-
 ## Ресурсы модулей
 
 Если модуль поставляет изображения или другие ассеты, они лежат внутри самого репозитория модуля в папке `resources/`.
