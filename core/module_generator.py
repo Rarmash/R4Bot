@@ -49,7 +49,11 @@ class ModuleGenerator:
                 "required_services": ["config"],
             },
         )
-        self._write_text(target_dir / "requirements.txt", "py-cord>=2.6.0\n")
+        self._write_text(
+            target_dir / "requirements.txt",
+            "py-cord>=2.6.0\n"
+            "r4bot-sdk @ git+https://github.com/Rarmash/R4Bot-SDK.git@master\n",
+        )
         self._write_text(target_dir / ".gitignore", "__pycache__/\n*.pyc\n.venv/\n")
         self._write_text(
             target_dir / "README.md",
@@ -122,6 +126,9 @@ class ModuleGenerator:
 `service.py` — это необязательный слой для интеграций и расширений, если модуль
 должен подключаться к другим модулям или расширять их функциональность.
 
+Для разработки модуль использует отдельный SDK-пакет `r4bot-sdk`, поэтому IDE
+видит публичные классы и helper-ы без подключения исходников основного бота.
+
 ## Локальная установка
 
 ```bash
@@ -141,7 +148,7 @@ python manage_modules.py install github:OWNER/REPO@master --enable
     def _build_cog(module_id: str, class_name: str, module_name: str) -> str:
         return f"""import discord
 
-from core.sdk import R4BotModule
+from r4bot_sdk import R4BotModule
 
 
 class {class_name}(R4BotModule):

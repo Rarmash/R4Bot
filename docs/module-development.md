@@ -6,7 +6,7 @@
 
 Для внешних модулей поддерживается только следующий слой:
 - `bot.r4_services`
-- `core.sdk`
+- `r4bot_sdk`
 - `module.json`
 - `requirements.txt`
 - `*.example.json` для конфигов и секретов
@@ -42,8 +42,16 @@ resources/
 Для модуля можно использовать:
 
 ```python
-from core.sdk import R4BotModule
+from r4bot_sdk import R4BotModule
 ```
+
+Чтобы импорт работал в IDE и при установке модуля, добавьте SDK в `requirements.txt` модуля:
+
+```txt
+r4bot-sdk @ git+https://github.com/Rarmash/R4Bot-SDK.git@master
+```
+
+Для модулей используйте только `r4bot_sdk`. Внутренний код ядра бота не считается публичным API.
 
 `R4BotModule` даёт:
 - `get_server_data(guild_id)`
@@ -71,7 +79,7 @@ from core.sdk import R4BotModule
 ```python
 import discord
 
-from core.sdk import R4BotModule
+from r4bot_sdk import R4BotModule
 
 
 class Example(R4BotModule):
@@ -190,7 +198,7 @@ path = self.get_resource_path("image.png")
 Допустим, есть модуль `reputation`, который хочет отдавать наружу дополнительное поле с репутацией участника.
 
 ```python
-from core.sdk import R4BotModule
+from r4bot_sdk import R4BotModule
 from .service import ReputationService
 
 
@@ -231,7 +239,7 @@ class ReputationService:
 Допустим, есть отдельный модуль `membercard`, который умеет собирать такие поля и показывать их в своей карточке.
 
 ```python
-from core.sdk import collect_hook_results
+from r4bot_sdk import collect_hook_results
 from discord.ext import commands
 from .service import MemberCardService
 

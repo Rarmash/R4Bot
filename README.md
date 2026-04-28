@@ -29,6 +29,9 @@ bot.r4_services
 Подробности по разработке собственных модулей:
 - `docs/module-development.md`
 
+Публичный SDK для авторов модулей вынесен в отдельный пакет:
+- `r4bot-sdk @ git+https://github.com/Rarmash/R4Bot-SDK.git@master`
+
 Рекомендуемый стандарт модуля:
 - `cog.py` для Discord-обвязки
 - `service.py` для интеграций и расширений модуля, если они нужны
