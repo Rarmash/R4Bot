@@ -5,7 +5,6 @@ import discord
 from core.module_loader import ModuleLoader
 from core.runtime_context import RuntimeContext, RuntimeServices
 from modules.firebase import create_firebase_app
-from modules.versionChecker import VersionChecker
 from services.config_service import ConfigService
 from services.firebase_service import FirebaseService
 from services.module_config_service import ModuleConfigService
@@ -37,7 +36,6 @@ bot = discord.Bot(case_insensitive=True, intents=intents)
 bot.r4_context = runtime_context
 bot.r4_services = runtime_services
 module_loader = ModuleLoader(bot, config_service)
-VersionChecker(bot)
 
 commands_synced = False
 

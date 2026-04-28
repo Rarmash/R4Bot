@@ -6,7 +6,6 @@ import discord
 
 from core.module_loader import ModuleLoader
 from modules.firebase import create_firebase_app
-from modules.versionChecker import VersionChecker
 from services.config_service import ConfigService
 
 
@@ -24,7 +23,6 @@ class R4BotApplication:
 
         self.bot = discord.Bot(case_insensitive=True, intents=intents)
         self.loader = ModuleLoader(self.bot, self.config)
-        VersionChecker(self.bot)
         self._register_events()
 
     def _register_events(self):
