@@ -11,7 +11,6 @@ from services.firebase_service import FirebaseService
 from services.module_config_service import ModuleConfigService
 from services.module_resource_service import ModuleResourceService
 from services.module_state_service import ModuleStateService
-from services.profile_extension_service import ProfileExtensionService
 from services.secret_service import SecretService
 
 
@@ -25,7 +24,6 @@ runtime_services = RuntimeServices(
     module_config=ModuleConfigService(),
     resources=ModuleResourceService(config_service),
     module_state=ModuleStateService(config_service),
-    profile_extensions=ProfileExtensionService(),
     secrets=SecretService(config_service.paths.secrets_dir),
 )
 runtime_context = RuntimeContext(services=runtime_services)

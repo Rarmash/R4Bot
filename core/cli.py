@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 
+from core.module_generator import ModuleGenerator, ModuleGeneratorError
 from core.module_installer import ModuleInstaller, ModuleInstallerError
+from core.module_validator import ModuleValidator, ModuleValidatorError
 from services.config_service import ConfigService
 
 
@@ -36,6 +38,32 @@ def build_parser() -> argparse.ArgumentParser:
     disable_parser = subparsers.add_parser("disable", help="Disable an installed module")
     disable_parser.add_argument("module_id")
 
+    create_module_parser = subparsers.add_parser("create-module", help="Create a new module scaffold")
+    create_module_parser.add_argument("module_id", help="New module id")
+    create_module_parser.add_argument("--output", help="Target directory for the new module")
+    create_module_parser.add_argument("--name", help="Human-readable module name")
+    create_module_parser.add_argument("--author", default="", help="Module author")
+    create_module_parser.add_argument("--description", default="", help="Module description")
+    create_module_parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow writing into a non-empty directory",
+    )
+    create_module_parser.add_argument(
+        "--no-config-template",
+        action="store_true",
+        help="Do not generate <module>.example.json",
+    )
+    create_module_parser.add_argument(
+        "--no-secrets-template",
+        action="store_true",
+        help="Do not generate <module>.secrets.example.json",
+    )
+
+    validate_parser = subparsers.add_parser("validate", help="Validate a module scaffold")
+    validate_parser.add_argument("module_ref", help="path:module_dir or github:owner/repo[@ref]")
+    validate_parser.add_argument("--ref", help="Override Git ref for GitHub-based modules")
+
     subparsers.add_parser("list-installed", help="List installed modules")
     return parser
 
@@ -46,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
 
     config = ConfigService()
     installer = ModuleInstaller(config)
+    generator = ModuleGenerator()
+    validator = ModuleValidator()
 
     try:
         if args.command == "install":
@@ -98,6 +128,32 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Module '{args.module_id}' disabled.")
             return 0
 
+        if args.command == "create-module":
+            output_dir = config.paths.root / args.module_id if not args.output else config.paths.root / args.output
+            if args.output:
+                output_dir = output_dir.resolve()
+            generated_path = generator.generate(
+                args.module_id,
+                output_dir,
+                name=args.name,
+                author=args.author,
+                description=args.description,
+                overwrite=args.overwrite,
+                include_config_template=not args.no_config_template,
+                include_secrets_template=not args.no_secrets_template,
+            )
+            print(f"Module scaffold created: {generated_path}")
+            return 0
+
+        if args.command == "validate":
+            manifest, warnings = validator.validate(args.module_ref, ref=args.ref)
+            print(f"Module '{manifest.name}' ({manifest.module_id} {manifest.version}) is valid.")
+            if warnings:
+                print("Warnings:")
+                for warning in warnings:
+                    print(f"- {warning}")
+            return 0
+
         if args.command == "list-installed":
             installed = installer.list_installed_modules()
             if not installed:
@@ -108,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
                 status = "enabled" if module_data.get("enabled") else "disabled"
                 print(f"{module_id}: {module_data.get('version', '?')} [{status}]")
             return 0
-    except (ModuleInstallerError, KeyError) as exc:
+    except (ModuleInstallerError, ModuleGeneratorError, ModuleValidatorError, KeyError) as exc:
         print(f"Error: {exc}")
         return 1
 

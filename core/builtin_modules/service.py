@@ -324,6 +324,7 @@ class Service(commands.Cog):
         self.state_store.set_enabled(module_id, True)
         try:
             self.bot.load_extension(extension_path)
+            await self.bot.sync_commands()
         except Exception as exc:
             self.state_store.set_enabled(module_id, False)
             await ctx.respond(f"Не удалось включить модуль `{module_id}`: {exc}", ephemeral=True)
@@ -353,6 +354,7 @@ class Service(commands.Cog):
         if extension_path and extension_path in self.bot.extensions:
             try:
                 self.bot.unload_extension(extension_path)
+                await self.bot.sync_commands()
             except Exception as exc:
                 await ctx.respond(f"Не удалось выгрузить модуль `{module_id}`: {exc}", ephemeral=True)
                 return
@@ -387,6 +389,7 @@ class Service(commands.Cog):
             if extension_path in self.bot.extensions:
                 self.bot.unload_extension(extension_path)
             self.bot.load_extension(extension_path)
+            await self.bot.sync_commands()
         except Exception as exc:
             await ctx.respond(f"Не удалось перезагрузить модуль `{module_id}`: {exc}", ephemeral=True)
             return

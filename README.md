@@ -22,10 +22,16 @@ bot.r4_services
 - `module_config`
 - `resources`
 - `module_state`
-- `profile_extensions`
 - `secrets`
 
 За счёт этого внешние модули могут жить в отдельных репозиториях и не импортировать код ядра напрямую.
+
+Подробности по разработке собственных модулей:
+- `docs/module-development.md`
+
+Рекомендуемый стандарт модуля:
+- `cog.py` для Discord-обвязки
+- `service.py` для интеграций и расширений модуля, если они нужны
 
 ## Конфигурация
 
@@ -188,6 +194,20 @@ python manage_modules.py disable logger
 
 ```bash
 python manage_modules.py remove logger
+```
+
+### Создание нового модуля
+
+```bash
+python manage_modules.py create-module example --output C:\path\to\R4Bot-Module-Example
+```
+
+Генератор создаёт каркас с `cog.py` и `service.py`, чтобы у модуля сразу было место для optional-интеграций и расширений.
+
+### Проверка модуля
+
+```bash
+python manage_modules.py validate path:C:\path\to\R4Bot-Module-Example
 ```
 
 ### Важное замечание
