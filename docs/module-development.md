@@ -4,77 +4,132 @@
 
 ## Что считается публичным API
 
-Для внешних модулей поддерживается только следующий слой:
-- `bot.r4_services`
-- `r4bot_sdk`
-- `module.json`
-- `requirements.txt`
-- `*.example.json` для конфигов и секретов
+Для модулей поддерживается только этот слой:
 
-Прямые импорты внутренних файлов ядра не считаются стабильным API.
+- `r4bot_sdk`;
+- `bot.r4_services`;
+- `module.json`;
+- `requirements.txt`;
+- `<module_id>.example.json`;
+- `<module_id>.secrets.example.json`;
+- папка `resources/`.
 
-## Базовый подход
+Не импортируйте внутренние файлы ядра напрямую. Если модулю нужен новый тип интеграции, лучше оформить его через hook или добавить возможность в SDK.
 
-Рекомендуемая структура модуля:
+## Репозиторий модуля
 
-```txt
+Рекомендуемая структура:
+
+```text
 module.json
 cog.py
 service.py
 requirements.txt
 README.md
 resources/
-<module>.example.json
-<module>.secrets.example.json
+<module_id>.example.json
+<module_id>.secrets.example.json
 ```
 
-Границы ответственности такие:
-- `cog.py` — Discord-обвязка, команды, listeners, регистрация Cog, основное поведение модуля
-- `service.py` — необязательный слой для интеграций и расширений
+Обязательные файлы:
 
-Важно:
-- `service.py` не должен автоматически считаться местом для всей логики модуля
-- обычные slash-команды и базовое поведение вполне нормально оставлять в `cog.py`
-- `service.py` полезен там, где модуль подключается к другим модулям или отдаёт им расширения
+- `module.json`;
+- `cog.py`;
+- `requirements.txt`.
+
+Необязательные файлы:
+
+- `service.py`;
+- `README.md`;
+- `resources/`;
+- example-конфиги и example-секреты.
+
+## `cog.py` и `service.py`
+
+`cog.py` отвечает за Discord-часть:
+
+- slash-команды;
+- listeners;
+- UI-компоненты;
+- регистрацию Cog;
+- основное поведение модуля.
+
+`service.py` нужен не для всей логики модуля, а для интеграций и расширений.
+
+Хорошие кандидаты для `service.py`:
+
+- регистрация hook-провайдеров;
+- сбор данных из hook-потребителей;
+- optional-интеграции с другими модулями;
+- подключаемые возможности, которые другой модуль может использовать.
+
+Обычную логику команд можно спокойно оставлять в `cog.py`, если так модуль понятнее.
 
 ## SDK
 
-Для модуля можно использовать:
-
-```python
-from r4bot_sdk import R4BotModule
-```
-
-Чтобы импорт работал в IDE и при установке модуля, добавьте SDK в `requirements.txt` модуля:
+Добавьте SDK в `requirements.txt` модуля:
 
 ```txt
 r4bot-sdk @ git+https://github.com/Rarmash/R4Bot-SDK.git@master
 ```
 
-Для модулей используйте только `r4bot_sdk`. Внутренний код ядра бота не считается публичным API.
+Базовый импорт:
+
+```python
+from r4bot_sdk import R4BotModule
+```
 
 `R4BotModule` даёт:
-- `get_server_data(guild_id)`
-- `get_module_config(guild_id)`
-- `get_module_secrets()`
-- `get_secret(key, default=None)`
-- `get_resource_path(*parts)`
-- `is_module_enabled(module_id)`
-- `register_hook_provider(hook_name, provider)`
-- `unregister_hook_provider(hook_name)`
-- `list_hook_providers(hook_name)`
-- `collect_hook_results(hook_name, **payload)`
-- `subscribe_hook_events(hook_name, listener)`
-- `unsubscribe_hook_events(hook_name, listener)`
 
-Также в модуле доступны:
-- `self.bot`
-- `self.services`
-- `self.context`
+- `self.bot`;
+- `self.services`;
+- `self.context`;
+- `get_server_data(guild_id)`;
+- `get_module_config(guild_id)`;
+- `get_module_secrets()`;
+- `get_secret(key, default=None)`;
+- `get_resource_path(*parts)`;
+- `is_module_enabled(module_id)`;
+- `register_hook_provider(hook_name, provider)`;
+- `unregister_hook_provider(hook_name)`;
+- `list_hook_providers(hook_name)`;
+- `collect_hook_results(hook_name, **payload)`;
+- `subscribe_hook_events(hook_name, listener)`;
+- `unsubscribe_hook_events(hook_name, listener)`.
 
-## Пример структуры кода
+## Runtime services
 
-### `cog.py`
+Модуль получает общие сервисы через:
+
+```python
+self.services
+```
+
+или:
+
+```python
+bot.r4_services
+```
+
+Доступные сервисы:
+
+- `config`;
+- `firebase`;
+- `module_config`;
+- `module_state`;
+- `resources`;
+- `secrets`.
+
+Пример:
+
+```python
+server_data = self.get_server_data(ctx.guild.id)
+module_config = self.get_module_config(ctx.guild.id)
+api_key = self.get_secret("api_key")
+image_path = self.get_resource_path("banner.png")
+```
+
+## Минимальный `cog.py`
 
 ```python
 import discord
@@ -87,7 +142,7 @@ class Example(R4BotModule):
 
     module = discord.SlashCommandGroup("example", "Example")
 
-    @module.command(description="Проверка модуля")
+    @module.command(description="Проверить модуль")
     async def ping(self, ctx):
         server_data = self.get_server_data(ctx.guild.id)
         if not server_data:
@@ -99,28 +154,6 @@ class Example(R4BotModule):
 
 def setup(bot):
     bot.add_cog(Example(bot))
-```
-
-### `service.py`
-
-```python
-class ExampleService:
-    def __init__(self, module):
-        self.module = module
-        self.bot = module.bot
-        self.services = module.services
-
-    def register_hooks(self):
-        # Здесь модуль может зарегистрировать свои расширения.
-        # Например:
-        # self.module.register_hook_provider("consumer.fields", self.build_profile_field)
-        pass
-
-    def unregister_hooks(self):
-        # Здесь модуль снимает расширения при выгрузке.
-        # Например:
-        # self.module.unregister_hook_provider("consumer.fields")
-        pass
 ```
 
 ## `module.json`
@@ -142,63 +175,146 @@ class ExampleService:
 }
 ```
 
-## Конфиги и секреты
+Поля:
 
-Обычные настройки модуля лежат в:
+- `id` — технический ID модуля, совпадает с папкой в `installed_modules`.
+- `name` — человекочитаемое имя.
+- `version` — версия модуля.
+- `entrypoint` — Python-файл без `.py`, обычно `cog`.
+- `description` — описание.
+- `author` — автор.
+- `min_core_version` — минимальная версия ядра.
+- `required_services` — список сервисов, которые нужны модулю.
 
-```txt
+Версию нужно повышать при каждом изменении, которое должен получить пользователь через `manage_modules.py update`.
+
+Если версия в источнике не выше установленной, update пропустит модуль.
+
+## Конфиг модуля
+
+Обычные настройки модуля хранятся в:
+
+```text
 config/modules/<module_id>.json
 ```
 
-Шаблон для автосоздания при установке:
+Чтобы установщик создал файл автоматически, добавьте в репозиторий:
 
-```txt
+```text
 <module_id>.example.json
 ```
 
-Секреты модуля лежат в:
+Пример:
 
-```txt
+```json
+{
+  "123456789012345678": {
+    "channel_id": 0,
+    "enabled": true
+  }
+}
+```
+
+Чтение из модуля:
+
+```python
+module_config = self.get_module_config(ctx.guild.id) or {}
+channel_id = module_config.get("channel_id")
+```
+
+## Секреты модуля
+
+Секреты хранятся в:
+
+```text
 config/secrets/<module_id>.json
 ```
 
-Шаблон для автосоздания при установке:
+Чтобы установщик создал файл автоматически, добавьте в репозиторий:
 
-```txt
+```text
 <module_id>.secrets.example.json
 ```
 
+Пример:
+
+```json
+{
+  "api_key": ""
+}
+```
+
+Чтение из модуля:
+
+```python
+api_key = self.get_secret("api_key")
+```
+
+Не храните реальные секреты в Git.
+
 ## Ресурсы
 
-Если модулю нужны изображения или другие ассеты, храните их в:
+Если модулю нужны изображения или другие ассеты, положите их в:
 
-```txt
+```text
 resources/
 ```
 
-В коде путь можно получить так:
+Получение пути:
 
 ```python
-path = self.get_resource_path("image.png")
+image_path = self.get_resource_path("image.png")
 ```
 
-## Optional-интеграции
+После установки ресурсы будут лежать в:
 
-Модули могут расширять друг друга через хуки. Полезно мыслить это так:
-- один модуль является поставщиком расширения
-- другой модуль является потребителем расширения
+```text
+installed_modules/<module_id>/resources/
+```
+
+## Зависимости
+
+Все зависимости модуля должны быть в его собственном `requirements.txt`.
+
+Пример:
+
+```txt
+py-cord>=2.6.0
+r4bot-sdk @ git+https://github.com/Rarmash/R4Bot-SDK.git@master
+requests>=2.32.0
+```
+
+Ядро не хранит зависимости внешних модулей в корневом `requirements.txt`.
+
+При `install` зависимости ставятся автоматически.
+
+При `update` зависимости ставятся только если версия модуля в источнике выше установленной версии.
+
+## Hooks
+
+Hooks позволяют модулям расширять друг друга без прямой зависимости.
+
+Схема:
+
+- модуль-потребитель задаёт имя hook-канала и формат данных;
+- модуль-поставщик регистрирует provider в этот hook-канал;
+- ядро не знает о конкретных типах расширений.
 
 Важно:
-- если модуль-потребитель не установлен, это не должно считаться ошибкой
-- provider можно зарегистрировать заранее
-- потребитель просто использует его позже, если появится в рантайме
+
+- отсутствие модуля-потребителя не должно ломать модуль-поставщик;
+- отсутствие provider-ов не должно ломать модуль-потребитель;
+- provider может возвращать `dict`, `list` или `None`, если формат hook-канала это допускает.
 
 ### Пример поставщика расширения
 
-Допустим, есть модуль `reputation`, который хочет отдавать наружу дополнительное поле с репутацией участника.
+Модуль `reputation` отдаёт дополнительное поле для карточки участника.
+
+`cog.py`:
 
 ```python
 from r4bot_sdk import R4BotModule
+
 from .service import ReputationService
 
 
@@ -212,7 +328,13 @@ class Reputation(R4BotModule):
 
     def cog_unload(self):
         self.service.unregister_hooks()
+
+
+def setup(bot):
+    bot.add_cog(Reputation(bot))
 ```
+
+`service.py`:
 
 ```python
 class ReputationService:
@@ -222,12 +344,12 @@ class ReputationService:
         self.module = module
 
     def register_hooks(self):
-        self.module.register_hook_provider(self.HOOK_NAME, self.build_reputation_field)
+        self.module.register_hook_provider(self.HOOK_NAME, self.build_field)
 
     def unregister_hooks(self):
         self.module.unregister_hook_provider(self.HOOK_NAME)
 
-    async def build_reputation_field(self, ctx, member, user_data, server_data):
+    async def build_field(self, ctx, member, user_data, server_data):
         return {
             "name": "Репутация",
             "value": str(user_data.get("reputation", 0)),
@@ -236,36 +358,40 @@ class ReputationService:
 
 ### Пример потребителя расширения
 
-Допустим, есть отдельный модуль `membercard`, который умеет собирать такие поля и показывать их в своей карточке.
+Модуль `membercard` собирает поля от других модулей.
+
+`cog.py`:
 
 ```python
-from r4bot_sdk import collect_hook_results
-from discord.ext import commands
+from r4bot_sdk import R4BotModule
+
 from .service import MemberCardService
 
 
-class MemberCard(commands.Cog):
+class MemberCard(R4BotModule):
+    module_id = "membercard"
+
     def __init__(self, bot):
-        self.bot = bot
-        self.service = MemberCardService(bot)
+        super().__init__(bot)
+        self.service = MemberCardService(self)
 
     async def render_card(self, ctx, member, user_data, server_data):
-        extra_fields = await self.service.collect_extra_fields(ctx, member, user_data, server_data)
-
-        for field in extra_fields:
+        fields = await self.service.collect_fields(ctx, member, user_data, server_data)
+        for field in fields:
             print(field["name"], field["value"])
 ```
+
+`service.py`:
 
 ```python
 class MemberCardService:
     HOOK_NAME = "membercard.fields"
 
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self, module):
+        self.module = module
 
-    async def collect_extra_fields(self, ctx, member, user_data, server_data):
-        results = await collect_hook_results(
-            self.bot,
+    async def collect_fields(self, ctx, member, user_data, server_data):
+        results = await self.module.collect_hook_results(
             self.HOOK_NAME,
             ctx=ctx,
             member=member,
@@ -283,51 +409,20 @@ class MemberCardService:
         return fields
 ```
 
-По такой же схеме можно строить и другие расширения:
-- модуль-потребитель сам задаёт имя hook-канала и формат данных
-- модуль-поставщик подключается к этому hook-каналу
-- ядро при этом остаётся универсальным и не знает про конкретные типы расширений
-
-## Зависимости
-
-Зависимости модуля должны лежать в его собственном `requirements.txt`.
-
-Ядро R4Bot не хранит модульные зависимости в корневом `requirements.txt`.
-При установке и обновлении модуля его `requirements.txt` ставится автоматически через CLI.
-Обновление выполняется только если `version` в `module.json` источника выше установленной версии.
-Если код модуля изменился, но версия не поднята, `manage_modules.py update` пропустит этот модуль как актуальный.
-
 ## Создание каркаса
-
-Новый модуль можно создать так:
 
 ```bash
 python manage_modules.py create-module example --output C:\path\to\R4Bot-Module-Example
 ```
 
-Генератор создаёт:
-- `module.json`
-- `cog.py`
-- `service.py`
-- `requirements.txt`
-- `README.md`
-- `.gitignore`
-- `<module>.example.json`
-- `<module>.secrets.example.json`
+Параметры:
 
-## Проверка модуля
-
-Перед установкой или публикацией можно прогнать валидацию:
-
-```bash
-python manage_modules.py validate path:C:\path\to\R4Bot-Module-Example
-```
-
-Или для GitHub-репозитория:
-
-```bash
-python manage_modules.py validate github:OWNER/REPO@master
-```
+- `--name` — человекочитаемое имя.
+- `--author` — автор.
+- `--description` — описание.
+- `--overwrite` — разрешить запись в непустую папку.
+- `--no-config-template` — не создавать `<module_id>.example.json`.
+- `--no-secrets-template` — не создавать `<module_id>.secrets.example.json`.
 
 ## Локальная установка
 
@@ -335,17 +430,46 @@ python manage_modules.py validate github:OWNER/REPO@master
 python manage_modules.py install path:C:\path\to\R4Bot-Module-Example --enable
 ```
 
+## Проверка
+
+```bash
+python manage_modules.py validate path:C:\path\to\R4Bot-Module-Example
+```
+
+или:
+
+```bash
+python manage_modules.py validate github:OWNER/REPO@master
+```
+
 ## Публикация
+
+1. Создайте GitHub-репозиторий.
+2. Убедитесь, что `module.json` содержит корректный `id` и `version`.
+3. Закоммитьте модуль.
+4. Запушьте ветку `master`.
+5. Установите модуль:
 
 ```bash
 python manage_modules.py install github:OWNER/REPO@master --enable
 ```
 
+## Правила версий
+
+- Начальная версия модуля: `1.0.0`.
+- Любое изменение, которое должен получить пользователь через `update`, требует повышения `version`.
+- `update` не переустанавливает модуль с такой же или более старой версией.
+- Для маленьких фиксов используйте patch-версию: `1.0.1`.
+- Для новых возможностей используйте minor-версию: `1.1.0`.
+- Для несовместимых изменений используйте major-версию: `2.0.0`.
+
 ## Практические рекомендации
 
-- Не импортируйте внутренние файлы ядра напрямую.
-- Не превращайте `service.py` в обязательную свалку всей логики.
-- Держите в `service.py` то, что связано с расширениями, интеграциями и подключаемыми возможностями.
-- Основное поведение slash-команд можно спокойно держать в `cog.py`, если так модуль понятнее.
-- Держите обычные настройки и секреты в разных файлах.
-- Все зависимости модуля храните внутри репозитория самого модуля.
+- Не импортируйте внутренние файлы ядра.
+- Не превращайте `service.py` в свалку всей логики.
+- Храните интеграции и hook wiring в `service.py`.
+- Храните команды и Discord listeners в `cog.py`.
+- Храните обычные настройки и секреты в разных файлах.
+- Не коммитьте реальные секреты.
+- Поднимайте `version` перед публикацией изменений.
+- Проверяйте модуль через `validate` перед установкой или пушем.
