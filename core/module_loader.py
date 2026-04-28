@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import sys
 
 from core.module_manifest import ModuleManifest
@@ -35,10 +34,7 @@ class ModuleLoader:
 
     @staticmethod
     def _resolve_builtin_extension(module_name: str) -> str:
-        core_extension = f"core.builtin_modules.{module_name}"
-        if importlib.util.find_spec(core_extension) is not None:
-            return core_extension
-        return f"cogs.{module_name}"
+        return f"core.builtin_modules.{module_name}"
 
     def load_installed_modules(self):
         for module_id in self.state_store.get_enabled_module_ids():
