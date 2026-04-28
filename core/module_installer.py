@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -17,6 +18,15 @@ from core.module_state import ModuleStateStore
 
 class ModuleInstallerError(Exception):
     """Raised when a module cannot be installed or managed."""
+
+
+@dataclass(frozen=True)
+class ModuleUpdateResult:
+    module_id: str
+    current_version: str
+    source_version: str
+    manifest: ModuleManifest
+    updated: bool
 
 
 class ModuleInstaller:
@@ -69,7 +79,7 @@ class ModuleInstaller:
             shutil.rmtree(target_dir, onexc=self._handle_remove_readonly)
         self.state_store.remove_module(module_id)
 
-    def update(self, module_id: str, ref: str | None = None) -> ModuleManifest:
+    def update(self, module_id: str, ref: str | None = None) -> ModuleUpdateResult:
         installed = self.state_store.list_installed()
         module_data = installed.get(module_id)
         if module_data is None:
@@ -77,38 +87,46 @@ class ModuleInstaller:
 
         enabled = bool(module_data.get("enabled"))
         source = module_data.get("source")
+        current_version = str(module_data.get("version") or "")
 
         if source == "github":
             repo = module_data.get("repo")
             if not repo:
                 raise ModuleInstallerError(f"Module '{module_id}' does not have a stored GitHub repository.")
             resolved_ref = ref or module_data.get("ref") or "main"
-            return self._install_from_github(repo, resolved_ref, enabled, requested_module_id=module_id)
+            return self._update_from_github(repo, resolved_ref, enabled, module_id, current_version)
 
         if source == "path":
             source_path = module_data.get("path")
             if not source_path:
                 raise ModuleInstallerError(f"Module '{module_id}' does not have a stored source path.")
-            return self._install_from_directory(Path(source_path), enabled, source=f"path:{source_path}")
+            return self._update_from_directory(Path(source_path), enabled, module_id, current_version)
 
         raise ModuleInstallerError(
             f"Module '{module_id}' has unsupported update source '{source}'. Reinstall it manually."
         )
 
-    def update_all(self, ref: str | None = None) -> tuple[list[tuple[str, ModuleManifest]], dict[str, str]]:
-        updated: list[tuple[str, ModuleManifest]] = []
+    def update_all(
+        self,
+        ref: str | None = None,
+    ) -> tuple[list[ModuleUpdateResult], list[ModuleUpdateResult], dict[str, str]]:
+        updated: list[ModuleUpdateResult] = []
+        skipped: list[ModuleUpdateResult] = []
         failed: dict[str, str] = {}
 
         for module_id in self.state_store.list_installed():
             try:
-                manifest = self.update(module_id, ref=ref)
+                result = self.update(module_id, ref=ref)
             except (ModuleInstallerError, KeyError) as exc:
                 failed[module_id] = str(exc)
                 continue
 
-            updated.append((module_id, manifest))
+            if result.updated:
+                updated.append(result)
+            else:
+                skipped.append(result)
 
-        return updated, failed
+        return updated, skipped, failed
 
     def _install_from_github(
         self,
@@ -163,6 +181,104 @@ class ModuleInstaller:
             },
         )
 
+    def _update_from_github(
+        self,
+        repo: str,
+        ref: str,
+        enable: bool,
+        requested_module_id: str,
+        current_version: str,
+    ) -> ModuleUpdateResult:
+        self.config.paths.temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = self.config.paths.temp_dir / f"r4bot-module-{uuid.uuid4().hex}"
+        archive_path = temp_dir / "module.zip"
+        extracted_dir = temp_dir / "extracted"
+
+        try:
+            extracted_dir.mkdir(parents=True, exist_ok=True)
+            self._download_archive(repo, ref, archive_path)
+
+            with ZipFile(archive_path, "r") as zip_file:
+                zip_file.extractall(extracted_dir)
+
+            manifest_path = self._find_manifest(extracted_dir)
+            manifest = ModuleManifest.from_file(manifest_path)
+            self._ensure_requested_module_id(requested_module_id, manifest)
+
+            if not self._is_source_version_newer(current_version, manifest.version):
+                return ModuleUpdateResult(
+                    module_id=requested_module_id,
+                    current_version=current_version,
+                    source_version=manifest.version,
+                    manifest=manifest,
+                    updated=False,
+                )
+
+            installed_manifest = self._install_from_manifest(
+                manifest_path=manifest_path,
+                enable=enable,
+                metadata={
+                    "source": "github",
+                    "repo": repo,
+                    "ref": ref,
+                },
+                requested_module_id=requested_module_id,
+            )
+            return ModuleUpdateResult(
+                module_id=requested_module_id,
+                current_version=current_version,
+                source_version=installed_manifest.version,
+                manifest=installed_manifest,
+                updated=True,
+            )
+        finally:
+            self._cleanup_directory(temp_dir)
+
+    def _update_from_directory(
+        self,
+        source_dir: Path,
+        enable: bool,
+        requested_module_id: str,
+        current_version: str,
+    ) -> ModuleUpdateResult:
+        if not source_dir.exists():
+            raise ModuleInstallerError(f"Module source path does not exist: {source_dir}")
+        if not source_dir.is_dir():
+            raise ModuleInstallerError(f"Module source path is not a directory: {source_dir}")
+
+        manifest_path = source_dir / "module.json"
+        if not manifest_path.exists():
+            raise ModuleInstallerError(f"Module source path does not contain module.json: {source_dir}")
+
+        manifest = ModuleManifest.from_file(manifest_path)
+        self._ensure_requested_module_id(requested_module_id, manifest)
+
+        if not self._is_source_version_newer(current_version, manifest.version):
+            return ModuleUpdateResult(
+                module_id=requested_module_id,
+                current_version=current_version,
+                source_version=manifest.version,
+                manifest=manifest,
+                updated=False,
+            )
+
+        installed_manifest = self._install_from_manifest(
+            manifest_path=manifest_path,
+            enable=enable,
+            metadata={
+                "source": "path",
+                "path": str(source_dir),
+            },
+            requested_module_id=requested_module_id,
+        )
+        return ModuleUpdateResult(
+            module_id=requested_module_id,
+            current_version=current_version,
+            source_version=installed_manifest.version,
+            manifest=installed_manifest,
+            updated=True,
+        )
+
     def _install_from_manifest(
         self,
         manifest_path: Path,
@@ -172,10 +288,7 @@ class ModuleInstaller:
     ) -> ModuleManifest:
         manifest = ModuleManifest.from_file(manifest_path)
 
-        if requested_module_id and requested_module_id != manifest.module_id:
-            raise ModuleInstallerError(
-                f"Installed module id mismatch: expected '{requested_module_id}', got '{manifest.module_id}'."
-            )
+        self._ensure_requested_module_id(requested_module_id, manifest)
 
         source_root = manifest_path.parent
         target_dir = self.install_dir / manifest.module_id
@@ -202,6 +315,61 @@ class ModuleInstaller:
             },
         )
         return manifest
+
+    @staticmethod
+    def _ensure_requested_module_id(requested_module_id: str | None, manifest: ModuleManifest):
+        if requested_module_id and requested_module_id != manifest.module_id:
+            raise ModuleInstallerError(
+                f"Installed module id mismatch: expected '{requested_module_id}', got '{manifest.module_id}'."
+            )
+
+    @classmethod
+    def _is_source_version_newer(cls, current_version: str, source_version: str) -> bool:
+        if not current_version:
+            return True
+        return cls._compare_versions(source_version, current_version) > 0
+
+    @staticmethod
+    def _compare_versions(left: str, right: str) -> int:
+        left_parts = ModuleInstaller._version_parts(left)
+        right_parts = ModuleInstaller._version_parts(right)
+        max_length = max(len(left_parts), len(right_parts))
+
+        for index in range(max_length):
+            left_value = left_parts[index] if index < len(left_parts) else 0
+            right_value = right_parts[index] if index < len(right_parts) else 0
+
+            if left_value == right_value:
+                continue
+
+            if isinstance(left_value, int) and isinstance(right_value, int):
+                return 1 if left_value > right_value else -1
+
+            left_text = str(left_value)
+            right_text = str(right_value)
+            return 1 if left_text > right_text else -1
+
+        return 0
+
+    @staticmethod
+    def _version_parts(version: str) -> list[int | str]:
+        normalized = version.strip().lower().removeprefix("v")
+        parts: list[int | str] = []
+        token = ""
+
+        for char in normalized:
+            if char.isalnum():
+                token += char
+                continue
+
+            if token:
+                parts.append(int(token) if token.isdigit() else token)
+                token = ""
+
+        if token:
+            parts.append(int(token) if token.isdigit() else token)
+
+        return parts
 
     def _ensure_module_config(self, source_root: Path, module_id: str):
         config_dir = self.config.paths.module_configs_dir

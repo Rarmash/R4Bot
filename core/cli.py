@@ -93,19 +93,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "update":
             print_runtime_change_warning()
             if args.all:
-                updated, failed = installer.update_all(ref=args.ref)
+                updated, skipped, failed = installer.update_all(ref=args.ref)
 
                 if updated:
                     print("Updated modules:")
-                    for module_id, manifest in updated:
-                        print(f"- {module_id}: {manifest.version}")
+                    for result in updated:
+                        print(f"- {result.module_id}: {result.current_version} -> {result.source_version}")
+
+                if skipped:
+                    print("Already up to date:")
+                    for result in skipped:
+                        print(f"- {result.module_id}: {result.current_version}")
 
                 if failed:
                     print("Failed modules:")
                     for module_id, error in failed.items():
                         print(f"- {module_id}: {error}")
 
-                if not updated and not failed:
+                if not updated and not skipped and not failed:
                     print("No modules installed.")
                     return 0
 
@@ -114,8 +119,14 @@ def main(argv: list[str] | None = None) -> int:
             if not args.module_id:
                 raise ModuleInstallerError("Specify a module id or use --all.")
 
-            manifest = installer.update(args.module_id, ref=args.ref)
-            print(f"Module '{manifest.name}' ({manifest.module_id} {manifest.version}) updated.")
+            result = installer.update(args.module_id, ref=args.ref)
+            if result.updated:
+                print(
+                    f"Module '{result.manifest.name}' "
+                    f"({result.module_id} {result.current_version} -> {result.source_version}) updated."
+                )
+            else:
+                print(f"Module '{result.manifest.name}' ({result.module_id} {result.current_version}) is up to date.")
             return 0
 
         if args.command == "enable":
