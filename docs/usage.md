@@ -201,6 +201,8 @@ Built-in команды находятся в группе `/service`.
 - `/service shutdown` — остановить процесс бота.
 - `/service modules` — показать установленные модули.
 - `/service moduleinfo` — показать информацию о конкретном модуле.
+- `/service doctor` — проверить состояние ядра, модулей и их зависимостей.
+- `/service moduleerrors` — показать последние ошибки загрузки модулей.
 - `/service enablemodule` — включить установленный модуль в runtime.
 - `/service disablemodule` — выключить установленный модуль в runtime.
 - `/service reloadmodule` — перезагрузить включённый модуль.
@@ -322,3 +324,14 @@ docker compose up --build -d
 ### `update` не подтягивает изменения
 
 Поднимите `version` в `module.json` модуля. Обновление выполняется только при более новой версии источника.
+
+### Модуль не загружается из-за зависимости
+
+Проверьте `required_dependencies` в `module.json` модуля. Все обязательные зависимости должны быть установлены и включены.
+
+Для диагностики используйте:
+
+```text
+/service doctor
+/service moduleerrors
+```

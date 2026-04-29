@@ -1,4 +1,5 @@
 import datetime
+import inspect
 import json
 import os
 import time
@@ -321,6 +322,15 @@ class Service(commands.Cog):
             await ctx.respond(f"У модуля `{module_id}` отсутствует `module.json`.", ephemeral=True)
             return
 
+        manifest = self.get_module_manifest(module_id)
+        missing_dependencies = self.get_missing_required_dependencies(manifest)
+        if missing_dependencies:
+            await ctx.respond(
+                f"Модуль `{module_id}` требует включённые зависимости: {', '.join(missing_dependencies)}.",
+                ephemeral=True,
+            )
+            return
+
         self.state_store.set_enabled(module_id, True)
         try:
             self.bot.load_extension(extension_path)
@@ -395,6 +405,143 @@ class Service(commands.Cog):
             return
 
         await ctx.respond(f"Модуль `{module_id}` перезагружен.", ephemeral=True)
+
+    @service.command(description="Проверить состояние ядра и модулей")
+    @discord.guild_only()
+    async def doctor(self, ctx):
+        await ctx.defer(ephemeral=True)
+        server_data = self.get_server_data(ctx.guild.id) or {}
+
+        issues = self.collect_core_health_issues()
+        issues.extend(await self.collect_module_health_issues())
+
+        embed = discord.Embed(
+            title="R4Bot doctor",
+            color=int(server_data.get("accent_color", DEFAULT_ACCENT_COLOR), 16),
+        )
+
+        if not issues:
+            embed.description = "Проблем не найдено."
+        else:
+            embed.description = self.build_issue_description(issues)
+            if len(issues) > 20:
+                embed.set_footer(text=f"Показано 20 из {len(issues)} проблем.")
+
+        await ctx.respond(embed=embed, ephemeral=True)
+
+    @service.command(description="Показать последние ошибки модулей")
+    @discord.guild_only()
+    async def moduleerrors(self, ctx):
+        await ctx.defer(ephemeral=True)
+        server_data = self.get_server_data(ctx.guild.id) or {}
+
+        errors = self.services.module_errors.list()
+        embed = discord.Embed(
+            title="Ошибки модулей",
+            color=int(server_data.get("accent_color", DEFAULT_ACCENT_COLOR), 16),
+        )
+
+        if not errors:
+            embed.description = "Ошибок загрузки модулей нет."
+        else:
+            for error in errors[-5:]:
+                created_at = int(error.created_at.timestamp())
+                embed.add_field(
+                    name=f"{error.module_id} ({error.source})",
+                    value=f"<t:{created_at}:R>\n```text\n{error.message[:700]}\n```",
+                    inline=False,
+                )
+
+        await ctx.respond(embed=embed, ephemeral=True)
+
+    @staticmethod
+    def build_issue_description(issues: list[str]) -> str:
+        lines = []
+        total_length = 0
+
+        for issue in issues[:20]:
+            line = f"- {issue}"
+            if len(line) > 350:
+                line = f"{line[:347]}..."
+            if total_length + len(line) + 1 > 3900:
+                break
+            lines.append(line)
+            total_length += len(line) + 1
+
+        return "\n".join(lines) or "Есть проблемы, но их описание не удалось уместить в сообщение."
+
+    def collect_core_health_issues(self) -> list[str]:
+        issues: list[str] = []
+
+        if not self.config.paths.servers_config.exists():
+            issues.append("`servers.json` отсутствует. Выполни `/service initserver` на сервере.")
+
+        if not self.config.token:
+            issues.append("В `.env` не задан `TOKEN`.")
+
+        installed = self.state_store.list_installed()
+        for module_id, module_data in sorted(installed.items()):
+            if not module_data.get("enabled"):
+                continue
+
+            manifest = self.get_module_manifest(module_id)
+            if manifest is None:
+                issues.append(f"Модуль `{module_id}` включён, но у него нет `module.json`.")
+                continue
+
+            missing = self.get_missing_required_dependencies(manifest)
+
+            if missing:
+                issues.append(
+                    f"Модуль `{module_id}` требует включённые зависимости: {', '.join(f'`{item}`' for item in missing)}."
+                )
+
+        for error in self.services.module_errors.list():
+            issues.append(f"Ошибка модуля `{error.module_id}`: {error.message}")
+
+        return issues
+
+    def get_missing_required_dependencies(self, manifest: ModuleManifest | None) -> list[str]:
+        if manifest is None:
+            return []
+
+        installed = self.state_store.list_installed()
+        builtin_modules = set(self.config.get_builtin_modules())
+        missing = []
+        for dependency_id in manifest.required_dependencies:
+            if dependency_id in builtin_modules:
+                continue
+            dependency = installed.get(dependency_id)
+            if not dependency or not dependency.get("enabled"):
+                missing.append(dependency_id)
+        return missing
+
+    async def collect_module_health_issues(self) -> list[str]:
+        issues: list[str] = []
+
+        for cog_name, cog in sorted(self.bot.cogs.items()):
+            health_check = getattr(cog, "health_check", None)
+            if health_check is None:
+                continue
+
+            try:
+                result = health_check()
+                if inspect.isawaitable(result):
+                    result = await result
+            except Exception as exc:
+                issues.append(f"`{cog_name}` health_check упал: {exc}")
+                continue
+
+            if not result:
+                continue
+            if isinstance(result, str):
+                issues.append(f"`{cog_name}`: {result}")
+                continue
+            if isinstance(result, list):
+                issues.extend(f"`{cog_name}`: {item}" for item in result if item)
+                continue
+
+            issues.append(f"`{cog_name}` вернул неподдерживаемый health_check результат.")
 
 
 def setup(bot):

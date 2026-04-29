@@ -88,6 +88,9 @@ class ModuleValidator:
         if unknown_services:
             warnings.append(f"Unknown required_services: {', '.join(unknown_services)}")
 
+        if manifest.module_id in manifest.required_dependencies:
+            warnings.append("required_dependencies contains the module itself")
+
         return warnings
 
     @staticmethod

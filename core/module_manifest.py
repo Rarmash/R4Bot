@@ -16,6 +16,7 @@ class ModuleManifest:
     min_core_version: str = ""
     required_settings: list[str] = field(default_factory=list)
     required_services: list[str] = field(default_factory=list)
+    required_dependencies: list[str] = field(default_factory=list)
 
     @classmethod
     def from_file(cls, path: Path) -> "ModuleManifest":
@@ -32,6 +33,7 @@ class ModuleManifest:
             min_core_version=payload.get("min_core_version", ""),
             required_settings=list(payload.get("required_settings", [])),
             required_services=list(payload.get("required_services", [])),
+            required_dependencies=list(payload.get("required_dependencies", [])),
         )
 
     def to_import_path(self, package_root: str = "installed_modules") -> str:

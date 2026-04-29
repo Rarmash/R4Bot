@@ -169,6 +169,7 @@ def setup(bot):
   "description": "Example module for R4Bot.",
   "author": "YourName",
   "min_core_version": "2.0",
+  "required_dependencies": [],
   "required_services": [
     "config"
   ]
@@ -184,6 +185,7 @@ def setup(bot):
 - `description` — описание.
 - `author` — автор.
 - `min_core_version` — минимальная версия ядра.
+- `required_dependencies` — модули, которые должны быть установлены и включены перед запуском этого модуля.
 - `required_services` — список сервисов, которые нужны модулю.
 
 Версию нужно повышать при каждом изменении, которое должен получить пользователь через `manage_modules.py update`.
@@ -305,6 +307,10 @@ Hooks позволяют модулям расширять друг друга �
 - отсутствие модуля-потребителя не должно ломать модуль-поставщик;
 - отсутствие provider-ов не должно ломать модуль-потребитель;
 - provider может возвращать `dict`, `list` или `None`, если формат hook-канала это допускает.
+
+Если модуль не может работать без другого модуля, укажите это в `required_dependencies`.
+
+Если модуль только расширяет другой модуль через hooks, не указывайте зависимость: hook-интеграция должна оставаться мягкой и не мешать загрузке.
 
 ### Пример поставщика расширения
 
@@ -440,6 +446,61 @@ python manage_modules.py validate path:C:\path\to\R4Bot-Module-Example
 
 ```bash
 python manage_modules.py validate github:OWNER/REPO@master
+```
+
+## Диагностика модуля
+
+Модуль может предоставить optional health check. Ядро вызовет его в `/service doctor`.
+
+Пример:
+
+```python
+class Example(R4BotModule):
+    module_id = "example"
+
+    async def health_check(self):
+        issues = []
+
+        for guild_id, config in self.services.module_config.load(self.module_id).items():
+            if not config.get("channel_id"):
+                issues.append(f"guild {guild_id}: channel_id не настроен")
+
+        return issues
+```
+
+`health_check` может быть обычной или async-функцией.
+
+Допустимые результаты:
+
+- `None` или пустой список — проблем нет.
+- `str` — одна проблема.
+- `list[str]` — список проблем.
+
+## Миграции
+
+Если обновление модуля требует изменить конфиг или секреты, добавьте файлы в:
+
+```text
+migrations/
+```
+
+Каждый `.py` файл должен содержать функцию:
+
+```python
+def migrate(context):
+    config_path = context.module_config_path
+    secrets_path = context.module_secrets_path
+    from_version = context.from_version
+    to_version = context.to_version
+```
+
+Миграции запускаются после копирования новой версии модуля и создания example-конфигов.
+
+Файлы выполняются в алфавитном порядке, поэтому удобно называть их так:
+
+```text
+001_add_channel_id.py
+002_rename_enabled_flag.py
 ```
 
 ## Публикация

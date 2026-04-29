@@ -40,14 +40,22 @@ class ModuleLoader:
         for module_id in self.state_store.get_enabled_module_ids():
             manifest_path = self.config.paths.installed_modules_dir / module_id / "module.json"
             if not manifest_path.exists():
-                print(f"Installed module '{module_id}' is enabled but missing module.json")
+                self._record_error(module_id, "installed", "Installed module is enabled but missing module.json")
                 continue
 
             try:
                 manifest = ModuleManifest.from_file(manifest_path)
+                missing_dependencies = self._get_missing_required_dependencies(manifest)
+                if missing_dependencies:
+                    self._record_error(
+                        module_id,
+                        "installed",
+                        f"Missing required enabled modules: {', '.join(missing_dependencies)}",
+                    )
+                    continue
                 self._load_extension(manifest.to_import_path(), module_id, source="installed")
             except Exception as exc:
-                print(f"Failed to load installed module '{module_id}': {exc}")
+                self._record_error(module_id, "installed", f"Failed to load installed module: {exc}")
 
     def _load_extension(self, extension_path: str, module_name: str, source: str):
         try:
@@ -57,11 +65,31 @@ class ModuleLoader:
             else:
                 self.loaded_installed_modules.append(module_name)
         except Exception as exc:
-            if source == "builtin":
-                self.failed_builtin_modules.append(module_name)
-            else:
-                self.failed_installed_modules.append(module_name)
-            print(f"Failed to load {source} module '{module_name}': {exc}")
+            self._record_error(module_name, source, str(exc))
+
+    def _get_missing_required_dependencies(self, manifest: ModuleManifest) -> list[str]:
+        installed = self.state_store.list_installed()
+        builtin_modules = set(self.config.get_builtin_modules())
+        missing = []
+        for dependency_id in manifest.required_dependencies:
+            if dependency_id in builtin_modules:
+                continue
+            dependency = installed.get(dependency_id)
+            if not dependency or not dependency.get("enabled"):
+                missing.append(dependency_id)
+        return missing
+
+    def _record_error(self, module_name: str, source: str, message: str):
+        if source == "builtin" and module_name not in self.failed_builtin_modules:
+            self.failed_builtin_modules.append(module_name)
+        if source == "installed" and module_name not in self.failed_installed_modules:
+            self.failed_installed_modules.append(module_name)
+
+        print(f"Failed to load {source} module '{module_name}': {message}")
+        services = getattr(self.bot, "r4_services", None)
+        module_errors = getattr(services, "module_errors", None)
+        if module_errors is not None:
+            module_errors.record(module_name, source, message)
 
     def _print_summary(self):
         print(

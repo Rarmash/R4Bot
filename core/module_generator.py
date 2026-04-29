@@ -46,6 +46,7 @@ class ModuleGenerator:
                 "description": description or f"{module_name} module for R4Bot.",
                 "author": author,
                 "min_core_version": VERSION,
+                "required_dependencies": [],
                 "required_services": ["config"],
             },
         )
@@ -127,6 +128,10 @@ class ModuleGenerator:
 
 Для разработки модуль использует отдельный SDK-пакет `r4bot-sdk`, поэтому IDE видит публичные классы и helper-ы без подключения исходников основного бота.
 
+Если модуль не может работать без других модулей, укажите их в `required_dependencies` в `module.json`.
+
+Если модулю нужна диагностика для `/service doctor`, добавьте в Cog метод `health_check`.
+
 ## Локальная установка
 
 ```bash
@@ -162,6 +167,9 @@ class {class_name}(R4BotModule):
             return
 
         await ctx.respond("Модуль работает.")
+
+    async def health_check(self):
+        return []
 
 
 def setup(bot):

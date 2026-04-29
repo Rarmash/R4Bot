@@ -13,6 +13,7 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 
 from core.module_manifest import ModuleManifest
+from core.module_migrations import ModuleMigrationError, ModuleMigrationRunner
 from core.module_state import ModuleStateStore
 
 
@@ -33,6 +34,7 @@ class ModuleInstaller:
     def __init__(self, config_service):
         self.config = config_service
         self.state_store = ModuleStateStore(self.config.paths.module_state_file)
+        self.migration_runner = ModuleMigrationRunner(self.config)
         self.install_dir = self.config.paths.installed_modules_dir
         self.install_dir.mkdir(parents=True, exist_ok=True)
 
@@ -64,6 +66,8 @@ class ModuleInstaller:
     def enable(self, module_id: str):
         if module_id not in self.state_store.list_installed():
             raise ModuleInstallerError(f"Module '{module_id}' is not installed.")
+        manifest = self._get_installed_manifest(module_id)
+        self._ensure_required_dependencies(manifest)
         self.state_store.set_enabled(module_id, True)
 
     def disable(self, module_id: str):
@@ -289,9 +293,13 @@ class ModuleInstaller:
         manifest = ModuleManifest.from_file(manifest_path)
 
         self._ensure_requested_module_id(requested_module_id, manifest)
+        if enable:
+            self._ensure_required_dependencies(manifest, installing_module_id=manifest.module_id)
 
         source_root = manifest_path.parent
         target_dir = self.install_dir / manifest.module_id
+        previous_data = self.state_store.list_installed().get(manifest.module_id, {})
+        previous_version = str(previous_data.get("version") or "")
         if target_dir.exists():
             shutil.rmtree(target_dir, onexc=self._handle_remove_readonly)
 
@@ -304,6 +312,16 @@ class ModuleInstaller:
             raise
         self._ensure_module_config(target_dir, manifest.module_id)
         self._ensure_module_secrets(target_dir, manifest.module_id)
+        try:
+            migrations = self.migration_runner.run(
+                module_id=manifest.module_id,
+                module_dir=target_dir,
+                from_version=previous_version,
+                to_version=manifest.version,
+            )
+        except ModuleMigrationError as exc:
+            raise ModuleInstallerError(f"Failed to run migrations for module '{manifest.module_id}': {exc}") from exc
+
         self.state_store.set_module(
             manifest.module_id,
             {
@@ -311,10 +329,36 @@ class ModuleInstaller:
                 "version": manifest.version,
                 "name": manifest.name,
                 "description": manifest.description,
+                "required_dependencies": manifest.required_dependencies,
+                "migrated_version": manifest.version if migrations else previous_data.get("migrated_version", manifest.version),
                 **metadata,
             },
         )
         return manifest
+
+    def _get_installed_manifest(self, module_id: str) -> ModuleManifest:
+        manifest_path = self.install_dir / module_id / "module.json"
+        if not manifest_path.exists():
+            raise ModuleInstallerError(f"Installed module '{module_id}' does not contain module.json.")
+        return ModuleManifest.from_file(manifest_path)
+
+    def _ensure_required_dependencies(self, manifest: ModuleManifest, installing_module_id: str | None = None):
+        installed = self.state_store.list_installed()
+        missing: list[str] = []
+
+        for dependency_id in manifest.required_dependencies:
+            if dependency_id == installing_module_id:
+                continue
+            if dependency_id in self.config.get_builtin_modules():
+                continue
+            dependency = installed.get(dependency_id)
+            if not dependency or not dependency.get("enabled"):
+                missing.append(dependency_id)
+
+        if missing:
+            raise ModuleInstallerError(
+                f"Module '{manifest.module_id}' requires enabled modules: {', '.join(missing)}."
+            )
 
     @staticmethod
     def _ensure_requested_module_id(requested_module_id: str | None, manifest: ModuleManifest):

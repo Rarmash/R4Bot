@@ -8,6 +8,7 @@ from modules.firebase import create_firebase_app
 from services.config_service import ConfigService
 from services.firebase_service import FirebaseService
 from services.module_config_service import ModuleConfigService
+from services.module_error_service import ModuleErrorService
 from services.module_resource_service import ModuleResourceService
 from services.module_state_service import ModuleStateService
 from services.secret_service import SecretService
@@ -21,6 +22,7 @@ runtime_services = RuntimeServices(
     config=config_service,
     firebase=FirebaseService(),
     module_config=ModuleConfigService(),
+    module_errors=ModuleErrorService(),
     resources=ModuleResourceService(config_service),
     module_state=ModuleStateService(config_service),
     secrets=SecretService(config_service.paths.secrets_dir),
