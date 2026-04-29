@@ -49,7 +49,8 @@ class ConfigService:
         self.debug_mode = environ.get("DEBUGMODE") == "ON"
 
         self.firebase_project_id = self._read_firebase_project_id()
-        self.servers_data, self.builtin_modules = self._read_servers_config()
+        self.servers_data = self._read_servers_config()
+        self.builtin_modules = self._discover_builtin_modules()
 
     def _read_firebase_project_id(self) -> str | None:
         if not self.paths.firebase_config.exists():
@@ -58,16 +59,29 @@ class ConfigService:
         with self.paths.firebase_config.open("r", encoding="utf8") as file:
             return json.load(file).get("project_id")
 
-    def _read_servers_config(self) -> tuple[dict, list[str]]:
+    def _read_servers_config(self) -> dict:
         if not self.paths.servers_config.exists():
-            return {}, []
+            return {}
 
         with self.paths.servers_config.open("r", encoding="utf8") as file:
             payload = json.load(file)
 
-        builtins = list(payload.get("cogs", []))
-        servers = {key: value for key, value in payload.items() if key != "cogs"}
-        return servers, builtins
+        return {
+            key: value
+            for key, value in payload.items()
+            if key.isdigit() and isinstance(value, dict)
+        }
+
+    def _discover_builtin_modules(self) -> list[str]:
+        builtins_dir = self.paths.root / "core" / "builtin_modules"
+        if not builtins_dir.exists():
+            return []
+
+        return sorted(
+            path.stem
+            for path in builtins_dir.glob("*.py")
+            if path.name != "__init__.py"
+        )
 
     def get_builtin_modules(self) -> list[str]:
         return list(self.builtin_modules)

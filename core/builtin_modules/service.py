@@ -44,7 +44,7 @@ def build_server_config(admin_id: int) -> dict:
 
 
 def initialize_server_config(path: Path, guild_id: int, admin_id: int, overwrite: bool = False) -> tuple[dict, bool]:
-    payload = read_json(path) or {"cogs": []}
+    payload = read_json(path) or {}
     guild_key = str(guild_id)
     already_exists = guild_key in payload
 
