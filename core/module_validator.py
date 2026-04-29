@@ -78,10 +78,6 @@ class ModuleValidator:
         if not readme_path.exists():
             warnings.append("README.md is missing")
 
-        service_path = source_dir / "service.py"
-        if not service_path.exists():
-            warnings.append("service.py is missing (recommended for optional integrations and extensions)")
-
         if not manifest.required_services:
             warnings.append("required_services is empty in module.json")
 
