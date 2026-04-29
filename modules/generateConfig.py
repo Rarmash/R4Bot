@@ -23,6 +23,14 @@ def check_servers_file():
             "bannedCategories": [],
             "bannedTTSChannels": [],
             "banned_TTS_role": 0,
+            "tempvoice": {
+                "trigger_channel_id": 0,
+                "category_id": 0,
+                "channel_name_template": "Канал {display_name}",
+                "user_limit": 0,
+                "bitrate": None,
+                "delete_empty_channels": True,
+            },
         },
     }
 

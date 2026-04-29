@@ -87,7 +87,15 @@ docker compose up --build -d
         "bannedUsers": [],
         "bannedCategories": [],
         "bannedTTSChannels": [],
-        "banned_TTS_role": 0
+        "banned_TTS_role": 0,
+        "tempvoice": {
+            "trigger_channel_id": 0,
+            "category_id": 0,
+            "channel_name_template": "Канал {display_name}",
+            "user_limit": 0,
+            "bitrate": null,
+            "delete_empty_channels": true
+        }
     }
 }
 ```
@@ -111,6 +119,13 @@ docker compose up --build -d
 - `bannedCategories` — категории, исключённые из логирования
 - `bannedTTSChannels` — каналы, где отключён TTS
 - `banned_TTS_role` — роль, которой запрещено использовать TTS
+- `tempvoice` — настройки временных голосовых каналов
+- `tempvoice.trigger_channel_id` — голосовой канал, при входе в который бот создаёт личный канал
+- `tempvoice.category_id` — категория, где будут создаваться временные каналы
+- `tempvoice.channel_name_template` — шаблон названия канала, доступны `{display_name}`, `{name}` и `{id}`
+- `tempvoice.user_limit` — лимит пользователей в созданном канале, `0` означает без лимита
+- `tempvoice.bitrate` — битрейт созданного канала, `null` оставляет значение по умолчанию
+- `tempvoice.delete_empty_channels` — удалять временный канал, когда он становится пустым
 
 ## О `.env`
 ```env
