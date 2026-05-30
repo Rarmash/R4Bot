@@ -16,12 +16,15 @@ FFMPEG_OPTIONS = {
     "before_options": "-nostdin",
     "options": '-vn -filter:a "atempo=1.6"',
 }
-MAX_TTS_CHUNK_LENGTH = 180
+MAX_TTS_CHUNK_LENGTH = 140
+MIN_TTS_RETRY_CHUNK_LENGTH = 45
 EMPTY_CHANNEL_DISCONNECT_DELAY = 3
-GTTS_GENERATION_TIMEOUT = 20
+GTTS_GENERATION_TIMEOUT = 35
+GTTS_GENERATION_ATTEMPTS = 2
 PLAYBACK_TIMEOUT = 45
-TTS_MESSAGE_TIMEOUT = 150
+TTS_MESSAGE_TIMEOUT = 240
 PLAYBACK_START_TIMEOUT = 3
+PUNCTUATION_BREAK_CHARS = ".!?…;:,"
 
 TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
 GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
@@ -112,6 +115,22 @@ def detect_tts_language(text: str) -> str:
     return "en" if latin_letters > cyrillic_letters else "ru"
 
 
+def find_split_index(text: str, chunk_size: int) -> int:
+    window = text[: chunk_size + 1]
+    min_punctuation_index = max(20, chunk_size // 3)
+
+    for index in range(min(len(window) - 1, chunk_size), min_punctuation_index - 1, -1):
+        if window[index] in PUNCTUATION_BREAK_CHARS:
+            return index + 1
+
+    min_space_index = max(10, chunk_size // 3)
+    space_index = window.rfind(" ", 0, chunk_size + 1)
+    if space_index >= min_space_index:
+        return space_index
+
+    return chunk_size
+
+
 def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[str]:
     normalized_text = " ".join(text.split())
     if not normalized_text:
@@ -119,39 +138,18 @@ def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[st
     if len(normalized_text) <= chunk_size:
         return [normalized_text]
 
-    sentence_parts = re.split(r"(?<=[.!?])\s+", normalized_text)
     chunks = []
-    current_chunk = []
-    current_length = 0
+    remaining_text = normalized_text
 
-    for sentence in sentence_parts:
-        sentence = sentence.strip()
-        if not sentence:
-            continue
+    while len(remaining_text) > chunk_size:
+        split_index = find_split_index(remaining_text, chunk_size)
+        chunk = remaining_text[:split_index].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining_text = remaining_text[split_index:].strip()
 
-        if len(sentence) <= chunk_size:
-            sentence_length = len(sentence) + (1 if current_chunk else 0)
-            if current_chunk and current_length + sentence_length > chunk_size:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [sentence]
-                current_length = len(sentence)
-            else:
-                current_chunk.append(sentence)
-                current_length += sentence_length
-            continue
-
-        for word in sentence.split():
-            word_length = len(word) + (1 if current_chunk else 0)
-            if current_chunk and current_length + word_length > chunk_size:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [word]
-                current_length = len(word)
-            else:
-                current_chunk.append(word)
-                current_length += word_length
-
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
+    if remaining_text:
+        chunks.append(remaining_text)
 
     return chunks
 
@@ -511,24 +509,59 @@ class Tts(commands.Cog):
         if not playback_started and last_error:
             raise last_error
 
+    @staticmethod
+    def save_tts_chunk(chunk: str, language: str, temp_file: Path):
+        gTTS(chunk, lang=language).save(str(temp_file))
+
     async def generate_tts_file(self, chunk: str, language: str) -> Path | None:
         temp_file = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
-                temp_file = Path(temp_audio.name)
 
-            await asyncio.wait_for(
-                asyncio.to_thread(gTTS(chunk, lang=language).save, str(temp_file)),
-                timeout=GTTS_GENERATION_TIMEOUT,
-            )
-            return temp_file
-        except asyncio.TimeoutError:
-            print("TTS chunk generation timed out, skipping chunk.")
-        except Exception as exc:
-            print(f"TTS chunk generation failed: {exc}")
+        for attempt in range(GTTS_GENERATION_ATTEMPTS):
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
+                    temp_file = Path(temp_audio.name)
 
-        await self.safe_unlink_temp_file(temp_file)
+                timeout = GTTS_GENERATION_TIMEOUT + attempt * 10
+                await asyncio.wait_for(
+                    asyncio.to_thread(self.save_tts_chunk, chunk, language, temp_file),
+                    timeout=timeout,
+                )
+
+                if temp_file.exists() and temp_file.stat().st_size > 0:
+                    return temp_file
+
+                print("TTS chunk generation produced an empty file.")
+            except asyncio.TimeoutError:
+                print(f"TTS chunk generation attempt {attempt + 1}/{GTTS_GENERATION_ATTEMPTS} timed out.")
+            except Exception as exc:
+                print(f"TTS chunk generation attempt {attempt + 1}/{GTTS_GENERATION_ATTEMPTS} failed: {exc}")
+
+            await self.safe_unlink_temp_file(temp_file)
+            temp_file = None
+            await asyncio.sleep(0.5 * (attempt + 1))
+
         return None
+
+    async def generate_tts_files_for_chunk(self, chunk: str, language: str, depth: int = 0) -> list[Path]:
+        temp_file = await self.generate_tts_file(chunk, language)
+        if temp_file is not None:
+            return [temp_file]
+
+        if depth >= 3 or len(chunk) <= MIN_TTS_RETRY_CHUNK_LENGTH:
+            print("TTS chunk generation failed after retries, skipping smallest chunk.")
+            return []
+
+        fallback_size = max(MIN_TTS_RETRY_CHUNK_LENGTH, min(MAX_TTS_CHUNK_LENGTH, len(chunk) // 2))
+        fallback_chunks = split_tts_text(chunk, chunk_size=fallback_size)
+        if len(fallback_chunks) <= 1:
+            print("TTS chunk generation failed and chunk cannot be split further.")
+            return []
+
+        print(f"TTS chunk generation failed, retrying as {len(fallback_chunks)} smaller chunks.")
+        files = []
+        for fallback_chunk in fallback_chunks:
+            files.extend(await self.generate_tts_files_for_chunk(fallback_chunk, language, depth=depth + 1))
+        return files
 
     async def process_speech_chunks(self, voice_channel, source_channel, speech: str, tts_id: int):
         chunks = split_tts_text(speech)
@@ -539,29 +572,23 @@ class Tts(commands.Cog):
 
         typing_context = await self.safe_typing_context(source_channel)
         async with typing_context:
-            next_file_task = asyncio.create_task(self.generate_tts_file(chunks[0], language))
-
-            for index, _chunk in enumerate(chunks):
-                temp_file = None
+            for chunk in chunks:
+                temp_files = []
                 try:
                     if tts_id in self.skipped_tts_ids:
                         break
 
-                    temp_file = await next_file_task
-                    if index + 1 < len(chunks):
-                        next_file_task = asyncio.create_task(self.generate_tts_file(chunks[index + 1], language))
-                    else:
-                        next_file_task = None
-
-                    if temp_file is None:
+                    temp_files = await self.generate_tts_files_for_chunk(chunk, language)
+                    if not temp_files:
                         continue
 
-                    await self.play_audio_file(voice_channel, temp_file, tts_id=tts_id)
+                    for temp_file in temp_files:
+                        if tts_id in self.skipped_tts_ids:
+                            break
+                        await self.play_audio_file(voice_channel, temp_file, tts_id=tts_id)
                 finally:
-                    await self.safe_unlink_temp_file(temp_file)
-
-            if next_file_task is not None and not next_file_task.done():
-                next_file_task.cancel()
+                    for temp_file in temp_files:
+                        await self.safe_unlink_temp_file(temp_file)
 
     async def process_queue(self):
         if self.is_playing:
