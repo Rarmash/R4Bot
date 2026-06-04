@@ -5,6 +5,7 @@ import unicodedata
 from asyncio import Queue
 from contextlib import nullcontext
 from pathlib import Path
+from time import monotonic
 
 import discord
 from discord.ext import commands
@@ -22,6 +23,7 @@ GTTS_GENERATION_TIMEOUT = 20
 PLAYBACK_TIMEOUT = 45
 TTS_MESSAGE_TIMEOUT = 150
 PLAYBACK_START_TIMEOUT = 3
+VOICE_CLIENT_MAX_AGE = 18 * 60
 
 TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
 GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
@@ -221,6 +223,7 @@ class Tts(commands.Cog):
         self.pending_disconnects = {}
         self.current_tts_id = None
         self.skipped_tts_ids = set()
+        self.voice_connected_at_by_guild = {}
 
     def get_server_data(self, guild_id: int):
         return self.servers_data.get(str(guild_id))
@@ -238,6 +241,7 @@ class Tts(commands.Cog):
 
     async def reset_voice_client(self, guild):
         voice_client = guild.voice_client
+        self.voice_connected_at_by_guild.pop(guild.id, None)
         if voice_client is None:
             return
 
@@ -413,17 +417,32 @@ class Tts(commands.Cog):
         except Exception as exc:
             print(f"Error in on_message: {exc}")
 
+    def is_voice_client_stale(self, guild_id: int) -> bool:
+        connected_at = self.voice_connected_at_by_guild.get(guild_id)
+        if connected_at is None:
+            return False
+
+        return monotonic() - connected_at >= VOICE_CLIENT_MAX_AGE
+
     async def ensure_voice_client(self, channel):
         voice_client = channel.guild.voice_client
 
         if voice_client and not voice_client.is_connected():
             await voice_client.disconnect(force=True)
             voice_client = None
+            self.voice_connected_at_by_guild.pop(channel.guild.id, None)
+
+        if voice_client and self.is_voice_client_stale(channel.guild.id):
+            print("TTS voice client is stale, reconnecting before playback.")
+            await self.reset_voice_client(channel.guild)
+            voice_client = None
 
         if voice_client is None:
             voice_client = await channel.connect(timeout=30.0, reconnect=True)
+            self.voice_connected_at_by_guild[channel.guild.id] = monotonic()
         elif voice_client.channel != channel:
             await voice_client.move_to(channel)
+            self.voice_connected_at_by_guild[channel.guild.id] = monotonic()
 
         pending_disconnect = self.pending_disconnects.get(channel.guild.id)
         if pending_disconnect and not pending_disconnect.done():
@@ -497,14 +516,12 @@ class Tts(commands.Cog):
                 last_error = TimeoutError("TTS playback timed out.")
                 if voice_client.is_playing():
                     voice_client.stop()
-                if attempt == 2:
-                    await self.reset_voice_client(voice_channel.guild)
+                await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 timed out.")
                 await asyncio.sleep(1)
             except Exception as playback_error:
                 last_error = playback_error
-                if attempt == 2:
-                    await self.reset_voice_client(voice_channel.guild)
+                await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 failed: {playback_error}")
                 await asyncio.sleep(1)
 
