@@ -20,6 +20,7 @@ FFMPEG_OPTIONS = {
 MAX_TTS_CHUNK_LENGTH = 140
 MIN_TTS_RETRY_CHUNK_LENGTH = 45
 EMPTY_CHANNEL_DISCONNECT_DELAY = 3
+TTS_VOICE_LIMIT_CONFIG_KEY = "tts_voice_limit"
 GTTS_GENERATION_TIMEOUT = 35
 GTTS_GENERATION_ATTEMPTS = 2
 PLAYBACK_TIMEOUT = 45
@@ -222,6 +223,114 @@ class Tts(commands.Cog):
         self.current_tts_id = None
         self.skipped_tts_ids = set()
         self.voice_connected_at_by_guild = {}
+        self.voice_limit_lock = asyncio.Lock()
+
+    def get_tts_voice_limit_config(self, guild_id: int) -> dict | None:
+        server_data = self.get_server_data(guild_id)
+        if not server_data:
+            return None
+
+        config = server_data.get(TTS_VOICE_LIMIT_CONFIG_KEY)
+        return config if isinstance(config, dict) else None
+
+    async def expand_voice_channel_for_tts(self, channel: discord.VoiceChannel | None):
+        if channel is None:
+            return
+
+        if not isinstance(channel, discord.VoiceChannel):
+            return
+
+        async with self.voice_limit_lock:
+            parsed_config = self.parse_tts_voice_limit_config(self.get_tts_voice_limit_config(channel.guild.id))
+            if parsed_config is None:
+                return
+
+            configured_channel_id, configured_limit = parsed_config
+            if channel.id != configured_channel_id:
+                return
+
+            human_member_count = sum(1 for member in channel.members if not member.bot)
+            if channel.user_limit != configured_limit or human_member_count > configured_limit - 1:
+                return
+
+            try:
+                await channel.edit(
+                    user_limit=configured_limit + 1,
+                    reason="R4Bot TTS temporary voice slot",
+                )
+            except Exception as exc:
+                print(f"Failed to expand TTS voice channel limit: {exc}")
+
+    def is_bot_in_channel(self, channel: discord.VoiceChannel) -> bool:
+        bot_user = self.Bot.user
+        return bot_user is not None and any(member.id == bot_user.id for member in channel.members)
+
+    @staticmethod
+    def parse_tts_voice_limit_config(config: dict | None) -> tuple[int, int] | None:
+        if not config:
+            return None
+
+        try:
+            channel_id = int(config.get("channel_id"))
+            limit = int(config.get("limit"))
+        except (TypeError, ValueError):
+            return None
+
+        if channel_id <= 0 or limit <= 0:
+            return None
+
+        return channel_id, limit
+
+    async def restore_voice_channel_from_config(self, channel: discord.VoiceChannel | None, config: dict | None):
+        if channel is None or not isinstance(channel, discord.VoiceChannel):
+            return
+
+        parsed_config = self.parse_tts_voice_limit_config(config)
+        if parsed_config is None:
+            return
+
+        tracked_channel_id, original_limit = parsed_config
+        if channel.id != tracked_channel_id:
+            return
+
+        if self.is_bot_in_channel(channel):
+            return
+
+        if channel.user_limit == original_limit:
+            return
+
+        try:
+            await channel.edit(
+                user_limit=original_limit,
+                reason="R4Bot TTS temporary voice slot released",
+            )
+        except Exception as exc:
+            print(f"Failed to restore TTS voice channel limit: {exc}")
+            return
+
+    async def restore_voice_channel_limit_if_needed(self, channel: discord.VoiceChannel | None):
+        if channel is None or not isinstance(channel, discord.VoiceChannel):
+            return
+
+        async with self.voice_limit_lock:
+            config = self.get_tts_voice_limit_config(channel.guild.id)
+            await self.restore_voice_channel_from_config(channel, config)
+
+    async def restore_tracked_voice_limits_without_bot(self):
+        for guild in self.Bot.guilds:
+            config = self.get_tts_voice_limit_config(guild.id)
+            if not config:
+                continue
+
+            try:
+                tracked_channel_id = int(config.get("channel_id"))
+            except (TypeError, ValueError):
+                continue
+
+            for channel in guild.voice_channels:
+                if channel.id == tracked_channel_id:
+                    await self.restore_voice_channel_limit_if_needed(channel)
+                    break
 
     def get_server_data(self, guild_id: int):
         return self.servers_data.get(str(guild_id))
@@ -239,6 +348,7 @@ class Tts(commands.Cog):
 
     async def reset_voice_client(self, guild):
         voice_client = guild.voice_client
+        voice_channel = voice_client.channel if voice_client is not None else None
         self.voice_connected_at_by_guild.pop(guild.id, None)
         if voice_client is None:
             return
@@ -253,6 +363,8 @@ class Tts(commands.Cog):
             await voice_client.disconnect(force=True)
         except Exception as exc:
             print(f"Error while resetting voice client: {exc}")
+        finally:
+            await self.restore_voice_channel_limit_if_needed(voice_channel)
 
     async def safe_unlink_temp_file(self, temp_file: Path | None):
         if temp_file is None:
@@ -348,7 +460,9 @@ class Tts(commands.Cog):
         if human_members:
             return
 
+        voice_channel = voice_client.channel
         await voice_client.disconnect(force=True)
+        await self.restore_voice_channel_limit_if_needed(voice_channel)
 
     async def schedule_disconnect_check(self, guild):
         guild_id = guild.id
@@ -369,6 +483,12 @@ class Tts(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        bot_user = self.Bot.user
+        if bot_user is not None and member.id == bot_user.id:
+            if before.channel != after.channel:
+                await self.restore_voice_channel_limit_if_needed(before.channel)
+            return
+
         if member.bot:
             return
 
@@ -377,6 +497,10 @@ class Tts(commands.Cog):
             return
 
         await self.schedule_disconnect_check(member.guild)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self.restore_tracked_voice_limits_without_bot()
 
     @commands.Cog.listener()
     async def on_message(self, ctx):
@@ -426,7 +550,9 @@ class Tts(commands.Cog):
         voice_client = channel.guild.voice_client
 
         if voice_client and not voice_client.is_connected():
+            voice_channel = voice_client.channel
             await voice_client.disconnect(force=True)
+            await self.restore_voice_channel_limit_if_needed(voice_channel)
             voice_client = None
             self.voice_connected_at_by_guild.pop(channel.guild.id, None)
 
@@ -436,10 +562,23 @@ class Tts(commands.Cog):
             voice_client = None
 
         if voice_client is None:
-            voice_client = await channel.connect(timeout=30.0, reconnect=True)
+            await self.expand_voice_channel_for_tts(channel)
+            try:
+                voice_client = await channel.connect(timeout=30.0, reconnect=True)
+            except Exception:
+                await self.restore_voice_channel_limit_if_needed(channel)
+                raise
             self.voice_connected_at_by_guild[channel.guild.id] = monotonic()
         elif voice_client.channel != channel:
-            await voice_client.move_to(channel)
+            previous_channel = voice_client.channel
+            previous_limit_config = self.get_tts_voice_limit_config(channel.guild.id)
+            await self.expand_voice_channel_for_tts(channel)
+            try:
+                await voice_client.move_to(channel)
+            except Exception:
+                await self.restore_voice_channel_limit_if_needed(channel)
+                raise
+            await self.restore_voice_channel_from_config(previous_channel, previous_limit_config)
             self.voice_connected_at_by_guild[channel.guild.id] = monotonic()
 
         pending_disconnect = self.pending_disconnects.get(channel.guild.id)
