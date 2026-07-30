@@ -69,7 +69,7 @@ class Voice(commands.Cog):
     def _flush_session(self, guild_id: int, user_id: int, started_at: datetime):
         elapsed_seconds = int((datetime.utcnow() - started_at).total_seconds())
         self._add_voice_time(guild_id, user_id, elapsed_seconds)
-        self._start_session(guild_id, user_id)
+        self.active_sessions[self._get_session_key(guild_id, user_id)] = datetime.utcnow()
 
     def _stop_session(self, guild_id: int, user_id: int):
         started_at = self._pop_session_start(guild_id, user_id)
