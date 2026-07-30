@@ -5,6 +5,7 @@ import unicodedata
 from asyncio import Queue
 from contextlib import nullcontext
 from pathlib import Path
+from time import monotonic
 
 import discord
 from discord.ext import commands
@@ -16,12 +17,17 @@ FFMPEG_OPTIONS = {
     "before_options": "-nostdin",
     "options": '-vn -filter:a "atempo=1.6"',
 }
-MAX_TTS_CHUNK_LENGTH = 180
+MAX_TTS_CHUNK_LENGTH = 140
+MIN_TTS_RETRY_CHUNK_LENGTH = 45
 EMPTY_CHANNEL_DISCONNECT_DELAY = 3
-GTTS_GENERATION_TIMEOUT = 20
+TTS_VOICE_LIMIT_CONFIG_KEY = "tts_voice_limit"
+GTTS_GENERATION_TIMEOUT = 35
+GTTS_GENERATION_ATTEMPTS = 2
 PLAYBACK_TIMEOUT = 45
-TTS_MESSAGE_TIMEOUT = 150
+TTS_MESSAGE_TIMEOUT = 240
 PLAYBACK_START_TIMEOUT = 3
+PUNCTUATION_BREAK_CHARS = ".!?…;:,"
+VOICE_CLIENT_MAX_AGE = 18 * 60
 
 TEXT_EMOJI_PATTERN = re.compile(r":[a-z0-9_+\-]+:", re.IGNORECASE)
 GIF_URL_PATTERN = re.compile(r"(?:https?://|www\.)\S*gif\S*", re.IGNORECASE)
@@ -112,6 +118,22 @@ def detect_tts_language(text: str) -> str:
     return "en" if latin_letters > cyrillic_letters else "ru"
 
 
+def find_split_index(text: str, chunk_size: int) -> int:
+    window = text[: chunk_size + 1]
+    min_punctuation_index = max(20, chunk_size // 3)
+
+    for index in range(min(len(window) - 1, chunk_size), min_punctuation_index - 1, -1):
+        if window[index] in PUNCTUATION_BREAK_CHARS:
+            return index + 1
+
+    min_space_index = max(10, chunk_size // 3)
+    space_index = window.rfind(" ", 0, chunk_size + 1)
+    if space_index >= min_space_index:
+        return space_index
+
+    return chunk_size
+
+
 def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[str]:
     normalized_text = " ".join(text.split())
     if not normalized_text:
@@ -119,39 +141,18 @@ def split_tts_text(text: str, chunk_size: int = MAX_TTS_CHUNK_LENGTH) -> list[st
     if len(normalized_text) <= chunk_size:
         return [normalized_text]
 
-    sentence_parts = re.split(r"(?<=[.!?])\s+", normalized_text)
     chunks = []
-    current_chunk = []
-    current_length = 0
+    remaining_text = normalized_text
 
-    for sentence in sentence_parts:
-        sentence = sentence.strip()
-        if not sentence:
-            continue
+    while len(remaining_text) > chunk_size:
+        split_index = find_split_index(remaining_text, chunk_size)
+        chunk = remaining_text[:split_index].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining_text = remaining_text[split_index:].strip()
 
-        if len(sentence) <= chunk_size:
-            sentence_length = len(sentence) + (1 if current_chunk else 0)
-            if current_chunk and current_length + sentence_length > chunk_size:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [sentence]
-                current_length = len(sentence)
-            else:
-                current_chunk.append(sentence)
-                current_length += sentence_length
-            continue
-
-        for word in sentence.split():
-            word_length = len(word) + (1 if current_chunk else 0)
-            if current_chunk and current_length + word_length > chunk_size:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = [word]
-                current_length = len(word)
-            else:
-                current_chunk.append(word)
-                current_length += word_length
-
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
+    if remaining_text:
+        chunks.append(remaining_text)
 
     return chunks
 
@@ -221,6 +222,115 @@ class Tts(commands.Cog):
         self.pending_disconnects = {}
         self.current_tts_id = None
         self.skipped_tts_ids = set()
+        self.voice_connected_at_by_guild = {}
+        self.voice_limit_lock = asyncio.Lock()
+
+    def get_tts_voice_limit_config(self, guild_id: int) -> dict | None:
+        server_data = self.get_server_data(guild_id)
+        if not server_data:
+            return None
+
+        config = server_data.get(TTS_VOICE_LIMIT_CONFIG_KEY)
+        return config if isinstance(config, dict) else None
+
+    async def expand_voice_channel_for_tts(self, channel: discord.VoiceChannel | None):
+        if channel is None:
+            return
+
+        if not isinstance(channel, discord.VoiceChannel):
+            return
+
+        async with self.voice_limit_lock:
+            parsed_config = self.parse_tts_voice_limit_config(self.get_tts_voice_limit_config(channel.guild.id))
+            if parsed_config is None:
+                return
+
+            configured_channel_id, configured_limit = parsed_config
+            if channel.id != configured_channel_id:
+                return
+
+            human_member_count = sum(1 for member in channel.members if not member.bot)
+            if channel.user_limit != configured_limit or human_member_count > configured_limit - 1:
+                return
+
+            try:
+                await channel.edit(
+                    user_limit=configured_limit + 1,
+                    reason="R4Bot TTS temporary voice slot",
+                )
+            except Exception as exc:
+                print(f"Failed to expand TTS voice channel limit: {exc}")
+
+    def is_bot_in_channel(self, channel: discord.VoiceChannel) -> bool:
+        bot_user = self.Bot.user
+        return bot_user is not None and any(member.id == bot_user.id for member in channel.members)
+
+    @staticmethod
+    def parse_tts_voice_limit_config(config: dict | None) -> tuple[int, int] | None:
+        if not config:
+            return None
+
+        try:
+            channel_id = int(config.get("channel_id"))
+            limit = int(config.get("limit"))
+        except (TypeError, ValueError):
+            return None
+
+        if channel_id <= 0 or limit <= 0:
+            return None
+
+        return channel_id, limit
+
+    async def restore_voice_channel_from_config(self, channel: discord.VoiceChannel | None, config: dict | None):
+        if channel is None or not isinstance(channel, discord.VoiceChannel):
+            return
+
+        parsed_config = self.parse_tts_voice_limit_config(config)
+        if parsed_config is None:
+            return
+
+        tracked_channel_id, original_limit = parsed_config
+        if channel.id != tracked_channel_id:
+            return
+
+        if self.is_bot_in_channel(channel):
+            return
+
+        if channel.user_limit == original_limit:
+            return
+
+        try:
+            await channel.edit(
+                user_limit=original_limit,
+                reason="R4Bot TTS temporary voice slot released",
+            )
+        except Exception as exc:
+            print(f"Failed to restore TTS voice channel limit: {exc}")
+            return
+
+    async def restore_voice_channel_limit_if_needed(self, channel: discord.VoiceChannel | None):
+        if channel is None or not isinstance(channel, discord.VoiceChannel):
+            return
+
+        async with self.voice_limit_lock:
+            config = self.get_tts_voice_limit_config(channel.guild.id)
+            await self.restore_voice_channel_from_config(channel, config)
+
+    async def restore_tracked_voice_limits_without_bot(self):
+        for guild in self.Bot.guilds:
+            config = self.get_tts_voice_limit_config(guild.id)
+            if not config:
+                continue
+
+            try:
+                tracked_channel_id = int(config.get("channel_id"))
+            except (TypeError, ValueError):
+                continue
+
+            for channel in guild.voice_channels:
+                if channel.id == tracked_channel_id:
+                    await self.restore_voice_channel_limit_if_needed(channel)
+                    break
 
     def get_server_data(self, guild_id: int):
         return self.servers_data.get(str(guild_id))
@@ -238,6 +348,8 @@ class Tts(commands.Cog):
 
     async def reset_voice_client(self, guild):
         voice_client = guild.voice_client
+        voice_channel = voice_client.channel if voice_client is not None else None
+        self.voice_connected_at_by_guild.pop(guild.id, None)
         if voice_client is None:
             return
 
@@ -251,6 +363,8 @@ class Tts(commands.Cog):
             await voice_client.disconnect(force=True)
         except Exception as exc:
             print(f"Error while resetting voice client: {exc}")
+        finally:
+            await self.restore_voice_channel_limit_if_needed(voice_channel)
 
     async def safe_unlink_temp_file(self, temp_file: Path | None):
         if temp_file is None:
@@ -346,7 +460,9 @@ class Tts(commands.Cog):
         if human_members:
             return
 
+        voice_channel = voice_client.channel
         await voice_client.disconnect(force=True)
+        await self.restore_voice_channel_limit_if_needed(voice_channel)
 
     async def schedule_disconnect_check(self, guild):
         guild_id = guild.id
@@ -367,6 +483,12 @@ class Tts(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        bot_user = self.Bot.user
+        if bot_user is not None and member.id == bot_user.id:
+            if before.channel != after.channel:
+                await self.restore_voice_channel_limit_if_needed(before.channel)
+            return
+
         if member.bot:
             return
 
@@ -375,6 +497,10 @@ class Tts(commands.Cog):
             return
 
         await self.schedule_disconnect_check(member.guild)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self.restore_tracked_voice_limits_without_bot()
 
     @commands.Cog.listener()
     async def on_message(self, ctx):
@@ -413,17 +539,47 @@ class Tts(commands.Cog):
         except Exception as exc:
             print(f"Error in on_message: {exc}")
 
+    def is_voice_client_stale(self, guild_id: int) -> bool:
+        connected_at = self.voice_connected_at_by_guild.get(guild_id)
+        if connected_at is None:
+            return False
+
+        return monotonic() - connected_at >= VOICE_CLIENT_MAX_AGE
+
     async def ensure_voice_client(self, channel):
         voice_client = channel.guild.voice_client
 
         if voice_client and not voice_client.is_connected():
+            voice_channel = voice_client.channel
             await voice_client.disconnect(force=True)
+            await self.restore_voice_channel_limit_if_needed(voice_channel)
+            voice_client = None
+            self.voice_connected_at_by_guild.pop(channel.guild.id, None)
+
+        if voice_client and self.is_voice_client_stale(channel.guild.id):
+            print("TTS voice client is stale, reconnecting before playback.")
+            await self.reset_voice_client(channel.guild)
             voice_client = None
 
         if voice_client is None:
-            voice_client = await channel.connect(timeout=30.0, reconnect=True)
+            await self.expand_voice_channel_for_tts(channel)
+            try:
+                voice_client = await channel.connect(timeout=30.0, reconnect=True)
+            except Exception:
+                await self.restore_voice_channel_limit_if_needed(channel)
+                raise
+            self.voice_connected_at_by_guild[channel.guild.id] = monotonic()
         elif voice_client.channel != channel:
-            await voice_client.move_to(channel)
+            previous_channel = voice_client.channel
+            previous_limit_config = self.get_tts_voice_limit_config(channel.guild.id)
+            await self.expand_voice_channel_for_tts(channel)
+            try:
+                await voice_client.move_to(channel)
+            except Exception:
+                await self.restore_voice_channel_limit_if_needed(channel)
+                raise
+            await self.restore_voice_channel_from_config(previous_channel, previous_limit_config)
+            self.voice_connected_at_by_guild[channel.guild.id] = monotonic()
 
         pending_disconnect = self.pending_disconnects.get(channel.guild.id)
         if pending_disconnect and not pending_disconnect.done():
@@ -497,38 +653,71 @@ class Tts(commands.Cog):
                 last_error = TimeoutError("TTS playback timed out.")
                 if voice_client.is_playing():
                     voice_client.stop()
-                if attempt == 2:
-                    await self.reset_voice_client(voice_channel.guild)
+                await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 timed out.")
                 await asyncio.sleep(1)
             except Exception as playback_error:
                 last_error = playback_error
-                if attempt == 2:
-                    await self.reset_voice_client(voice_channel.guild)
+                await self.reset_voice_client(voice_channel.guild)
                 print(f"TTS playback attempt {attempt + 1}/3 failed: {playback_error}")
                 await asyncio.sleep(1)
 
         if not playback_started and last_error:
             raise last_error
 
+    @staticmethod
+    def save_tts_chunk(chunk: str, language: str, temp_file: Path):
+        gTTS(chunk, lang=language).save(str(temp_file))
+
     async def generate_tts_file(self, chunk: str, language: str) -> Path | None:
         temp_file = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
-                temp_file = Path(temp_audio.name)
 
-            await asyncio.wait_for(
-                asyncio.to_thread(gTTS(chunk, lang=language).save, str(temp_file)),
-                timeout=GTTS_GENERATION_TIMEOUT,
-            )
-            return temp_file
-        except asyncio.TimeoutError:
-            print("TTS chunk generation timed out, skipping chunk.")
-        except Exception as exc:
-            print(f"TTS chunk generation failed: {exc}")
+        for attempt in range(GTTS_GENERATION_ATTEMPTS):
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
+                    temp_file = Path(temp_audio.name)
 
-        await self.safe_unlink_temp_file(temp_file)
+                timeout = GTTS_GENERATION_TIMEOUT + attempt * 10
+                await asyncio.wait_for(
+                    asyncio.to_thread(self.save_tts_chunk, chunk, language, temp_file),
+                    timeout=timeout,
+                )
+
+                if temp_file.exists() and temp_file.stat().st_size > 0:
+                    return temp_file
+
+                print("TTS chunk generation produced an empty file.")
+            except asyncio.TimeoutError:
+                print(f"TTS chunk generation attempt {attempt + 1}/{GTTS_GENERATION_ATTEMPTS} timed out.")
+            except Exception as exc:
+                print(f"TTS chunk generation attempt {attempt + 1}/{GTTS_GENERATION_ATTEMPTS} failed: {exc}")
+
+            await self.safe_unlink_temp_file(temp_file)
+            temp_file = None
+            await asyncio.sleep(0.5 * (attempt + 1))
+
         return None
+
+    async def generate_tts_files_for_chunk(self, chunk: str, language: str, depth: int = 0) -> list[Path]:
+        temp_file = await self.generate_tts_file(chunk, language)
+        if temp_file is not None:
+            return [temp_file]
+
+        if depth >= 3 or len(chunk) <= MIN_TTS_RETRY_CHUNK_LENGTH:
+            print("TTS chunk generation failed after retries, skipping smallest chunk.")
+            return []
+
+        fallback_size = max(MIN_TTS_RETRY_CHUNK_LENGTH, min(MAX_TTS_CHUNK_LENGTH, len(chunk) // 2))
+        fallback_chunks = split_tts_text(chunk, chunk_size=fallback_size)
+        if len(fallback_chunks) <= 1:
+            print("TTS chunk generation failed and chunk cannot be split further.")
+            return []
+
+        print(f"TTS chunk generation failed, retrying as {len(fallback_chunks)} smaller chunks.")
+        files = []
+        for fallback_chunk in fallback_chunks:
+            files.extend(await self.generate_tts_files_for_chunk(fallback_chunk, language, depth=depth + 1))
+        return files
 
     async def process_speech_chunks(self, voice_channel, source_channel, speech: str, tts_id: int):
         chunks = split_tts_text(speech)
@@ -539,29 +728,23 @@ class Tts(commands.Cog):
 
         typing_context = await self.safe_typing_context(source_channel)
         async with typing_context:
-            next_file_task = asyncio.create_task(self.generate_tts_file(chunks[0], language))
-
-            for index, _chunk in enumerate(chunks):
-                temp_file = None
+            for chunk in chunks:
+                temp_files = []
                 try:
                     if tts_id in self.skipped_tts_ids:
                         break
 
-                    temp_file = await next_file_task
-                    if index + 1 < len(chunks):
-                        next_file_task = asyncio.create_task(self.generate_tts_file(chunks[index + 1], language))
-                    else:
-                        next_file_task = None
-
-                    if temp_file is None:
+                    temp_files = await self.generate_tts_files_for_chunk(chunk, language)
+                    if not temp_files:
                         continue
 
-                    await self.play_audio_file(voice_channel, temp_file, tts_id=tts_id)
+                    for temp_file in temp_files:
+                        if tts_id in self.skipped_tts_ids:
+                            break
+                        await self.play_audio_file(voice_channel, temp_file, tts_id=tts_id)
                 finally:
-                    await self.safe_unlink_temp_file(temp_file)
-
-            if next_file_task is not None and not next_file_task.done():
-                next_file_task.cancel()
+                    for temp_file in temp_files:
+                        await self.safe_unlink_temp_file(temp_file)
 
     async def process_queue(self):
         if self.is_playing:

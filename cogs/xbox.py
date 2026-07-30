@@ -54,7 +54,7 @@ class Xbox(commands.Cog):
         gamertag = get_xbox_gamertag(ctx, gamertag)
         if not gamertag:
             await ctx.respond(
-                "Ты не привязал профиль Xbox к учётной записи Discord. Сделай это командой `/xbox connect <Gamertag>`.",
+                "Вы не привязали профиль Xbox к учётной записи Discord. Сделайте это, используя команду `/xbox connect <Gamertag>`!",
                 ephemeral=True,
             )
             return
@@ -120,8 +120,8 @@ class Xbox(commands.Cog):
             update_record(str(ctx.guild.id), "Users", author_id, {"xbox": str(user_info.xuid)})
             embed = discord.Embed(
                 description=(
-                    f"Аккаунт **{gamertag}** был успешно привязан к твоей учётной записи.\n"
-                    "Если ты изменишь Gamertag, здесь его менять не понадобится."
+                    f"Аккаунт **{gamertag}** был успешно привязан к Вашей учётной записи.\n"
+                    "Если Вы измените Gamertag, здесь его менять не понадобится."
                 ),
                 color=int(user_info.preferredColor["primaryColor"], 16),
             )

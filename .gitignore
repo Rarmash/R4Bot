@@ -12,3 +12,4 @@ speech.mp3
 *.json
 .venv
 venv
+installed_modules

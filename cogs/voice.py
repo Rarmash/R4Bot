@@ -17,6 +17,17 @@ def is_voice_activity_counted(voice_state) -> bool:
     )
 
 
+def get_countable_members(voice_channel):
+    if voice_channel is None:
+        return []
+
+    return [
+        member
+        for member in voice_channel.members
+        if not member.bot and is_voice_activity_counted(member.voice)
+    ]
+
+
 class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -35,7 +46,9 @@ class Voice(commands.Cog):
             yield int(guild_id), int(user_id), started_at
 
     def _start_session(self, guild_id: int, user_id: int):
-        self.active_sessions[self._get_session_key(guild_id, user_id)] = datetime.utcnow()
+        session_key = self._get_session_key(guild_id, user_id)
+        if session_key not in self.active_sessions:
+            self.active_sessions[session_key] = datetime.utcnow()
 
     def _pop_session_start(self, guild_id: int, user_id: int):
         return self.active_sessions.pop(self._get_session_key(guild_id, user_id), None)
@@ -56,7 +69,40 @@ class Voice(commands.Cog):
     def _flush_session(self, guild_id: int, user_id: int, started_at: datetime):
         elapsed_seconds = int((datetime.utcnow() - started_at).total_seconds())
         self._add_voice_time(guild_id, user_id, elapsed_seconds)
-        self._start_session(guild_id, user_id)
+        self.active_sessions[self._get_session_key(guild_id, user_id)] = datetime.utcnow()
+
+    def _stop_session(self, guild_id: int, user_id: int):
+        started_at = self._pop_session_start(guild_id, user_id)
+        if started_at is None:
+            return
+
+        elapsed_seconds = int((datetime.utcnow() - started_at).total_seconds())
+        self._add_voice_time(guild_id, user_id, elapsed_seconds)
+
+    def _sync_channel_sessions(self, voice_channel):
+        if voice_channel is None:
+            return
+
+        guild_id = voice_channel.guild.id
+        countable_members = get_countable_members(voice_channel)
+        countable_member_ids = {member.id for member in countable_members}
+
+        for session_key in list(self.active_sessions):
+            session_guild_id, session_user_id = session_key.split(":", 1)
+            if int(session_guild_id) != guild_id:
+                continue
+
+            user_id = int(session_user_id)
+            member = voice_channel.guild.get_member(user_id)
+            if member is None or member.voice is None or member.voice.channel != voice_channel:
+                continue
+
+            if len(countable_members) < 2 or user_id not in countable_member_ids:
+                self._stop_session(guild_id, user_id)
+
+        if len(countable_members) >= 2:
+            for member in countable_members:
+                self._start_session(guild_id, member.id)
 
     @tasks.loop(seconds=30)
     async def flush_voice_time(self):
@@ -73,29 +119,26 @@ class Voice(commands.Cog):
         self.active_sessions.clear()
         for guild in self.bot.guilds:
             for voice_channel in guild.voice_channels:
-                for member in voice_channel.members:
-                    if member.bot or not is_voice_activity_counted(member.voice):
-                        continue
-                    self._start_session(guild.id, member.id)
+                self._sync_channel_sessions(voice_channel)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         if member.bot:
             return
 
-        guild_id = member.guild.id
-        user_id = member.id
-        was_counted = is_voice_activity_counted(before)
-        is_counted = is_voice_activity_counted(after)
+        if before.channel is not None and not is_voice_activity_counted(after):
+            self._stop_session(member.guild.id, member.id)
+        elif before.channel is not None and before.channel != after.channel:
+            self._stop_session(member.guild.id, member.id)
 
-        if was_counted:
-            started_at = self._pop_session_start(guild_id, user_id)
-            if started_at is not None:
-                elapsed_seconds = int((datetime.utcnow() - started_at).total_seconds())
-                self._add_voice_time(guild_id, user_id, elapsed_seconds)
+        channels_to_sync = []
+        if before.channel is not None:
+            channels_to_sync.append(before.channel)
+        if after.channel is not None and after.channel not in channels_to_sync:
+            channels_to_sync.append(after.channel)
 
-        if is_counted:
-            self._start_session(guild_id, user_id)
+        for channel in channels_to_sync:
+            self._sync_channel_sessions(channel)
 
 
 def setup(bot):
